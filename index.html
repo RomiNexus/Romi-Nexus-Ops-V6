@@ -219,7 +219,7 @@
       <input class="auth-input" type="password" id="passphraseInput" placeholder="Enter passphrase"
         autocomplete="off" spellcheck="false"
         onkeydown="if(event.key==='Enter')requestOTP()">
-      <button class="auth-btn" onclick="requestOTP()" id="passphraseBtn">REQUEST ACCESS CODE →</button>
+      <button class="auth-btn" id="passphraseBtn">REQUEST ACCESS CODE →</button>
       <div class="auth-error" id="authError1"></div>
     </div>
 
@@ -231,10 +231,10 @@
         autocomplete="one-time-code" inputmode="numeric" spellcheck="false"
         oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"
         onkeydown="if(event.key==='Enter')verifyOpsOTP()">
-      <button class="auth-btn" onclick="verifyOpsOTP()" id="otpBtn">AUTHENTICATE →</button>
+      <button class="auth-btn" id="otpBtn">AUTHENTICATE →</button>
       <div class="auth-error" id="authError2"></div>
       <div style="margin-top:10px;text-align:center;">
-        <button onclick="backToPassphrase()" style="background:none;border:none;color:var(--text-muted);font-family:var(--mono);font-size:9px;cursor:pointer;">← BACK</button>
+        <button id="backBtn" style="background:none;border:none;color:var(--text-muted);font-family:var(--mono);font-size:9px;cursor:pointer;">← BACK</button>
       </div>
     </div>
   </div>
@@ -245,7 +245,7 @@
   <div class="modal-box">
     <div class="modal-header">
       <span class="modal-title" id="modalTitle">DD REVIEW</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <button class="modal-close" >✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-actions" id="modalActions"></div>
@@ -263,7 +263,7 @@
     <div class="top-bar-right">
       <div id="liveIndicator"><div class="live-dot"></div>LIVE</div>
       <span id="opsClock"></span>
-      <button class="ops-logout-btn" onclick="opsLogout()">LOGOUT</button>
+      <button class="ops-logout-btn" >LOGOUT</button>
     </div>
   </div>
 
@@ -392,8 +392,8 @@
               <div class="chat-area-header">
                 <span id="chatAreaTitle">SELECT A CONVERSATION</span>
                 <div style="display:flex;gap:6px;align-items:center;">
-                  <button class="action-btn close-room" id="closeTicketBtn" style="display:none;" onclick="opsCloseTicket()">CLOSE TICKET</button>
-                  <button class="action-btn close-room" id="closeRoomBtn"   style="display:none;" onclick="opsCloseRoom()">CLOSE ROOM</button>
+                  <button class="action-btn close-room" id="closeTicketBtn" style="display:none;" >CLOSE TICKET</button>
+                  <button class="action-btn close-room" id="closeRoomBtn"   style="display:none;" >CLOSE ROOM</button>
                 </div>
               </div>
               <!-- Room info bar -->
@@ -417,7 +417,7 @@
               <div class="ops-input-row" id="opsInputRow" style="display:none;">
                 <textarea class="ops-input" id="opsMessageInput" placeholder="Reply as [ROMI DESK]..." maxlength="2000"
                   onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();opsSendMessage();}"></textarea>
-                <button class="ops-send" onclick="opsSendMessage()">SEND</button>
+                <button class="ops-send" >SEND</button>
               </div>
             </div>
           </div>
@@ -1244,4 +1244,27 @@ function switchOpsTab(tab, btn) {
 
 function switchChatView(view, btn) {
   _chatView = view;
-  btn.cl
+  btn.cl  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
+}
+
+// Wire static buttons via addEventListener so onclick attributes are not needed
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('passphraseBtn')?.addEventListener('click', requestOTP);
+  document.getElementById('otpBtn')?.addEventListener('click', verifyOpsOTP);
+  document.getElementById('passphraseInput')?.addEventListener('keydown', e => { if(e.key==='Enter') requestOTP(); });
+  document.getElementById('otpInput')?.addEventListener('keydown', e => { if(e.key==='Enter') verifyOpsOTP(); });
+  document.querySelector('.modal-close')?.addEventListener('click', closeModal);
+  document.querySelector('.ops-logout-btn')?.addEventListener('click', opsLogout);
+  document.getElementById('opsMessageInput')?.addEventListener('keydown', e => {
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); opsSendMessage(); }
+  });
+  document.querySelector('.ops-send')?.addEventListener('click', opsSendMessage);
+  document.getElementById('closeTicketBtn')?.addEventListener('click', opsCloseTicket);
+  document.getElementById('closeRoomBtn')?.addEventListener('click', opsCloseRoom);
+  document.getElementById('backBtn')?.addEventListener('click', backToPassphrase);
+});
+</script>
+</body>
+</html>
