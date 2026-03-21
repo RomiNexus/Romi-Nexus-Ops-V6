@@ -18,7 +18,7 @@
     - Idle timeout 30 min preserved
     - Session restore on page reload preserved
   -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://YOUR-NEW-WORKER.workers.dev; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://rominexus-gateway-v6.vacorp-inquiries.workers.dev; img-src 'self' data:;">
   <meta name="referrer" content="no-referrer">
   <title>ROMI NEXUS — OPS COMMAND CENTER v6.1</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -226,7 +226,7 @@
     <!-- Step 2: OTP -->
     <div id="authStep2" style="display:none;">
       <div class="auth-label">ONE-TIME ACCESS CODE</div>
-      <div class="auth-info" style="margin-bottom:12px;">Code sent to ops@rominexus.com. Valid 10 minutes.</div>
+      <div class="auth-info" style="margin-bottom:12px;">Code sent to <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="afc0dfdcefddc0c2c6c1cad7dadc81ccc0c2">[email&#160;protected]</a>. Valid 10 minutes.</div>
       <input class="auth-input" type="text" id="otpInput" placeholder="000000" maxlength="6"
         autocomplete="one-time-code" inputmode="numeric" spellcheck="false"
         oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"
@@ -432,11 +432,11 @@
   </div>
 </div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 'use strict';
 
 // !! REPLACE WITH YOUR ACTUAL WORKER URL !!
-const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev/';
+const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
 
 // ── State ──
 let _opsToken       = '';
@@ -1244,10 +1244,4 @@ function switchOpsTab(tab, btn) {
 
 function switchChatView(view, btn) {
   _chatView = view;
-  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
-}
-</script>
-</body>
-</html>
+  btn.cl
