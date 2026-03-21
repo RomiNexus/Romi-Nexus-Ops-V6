@@ -1244,7 +1244,7 @@ function switchOpsTab(tab, btn) {
 
 function switchChatView(view, btn) {
   _chatView = view;
-  btn.cl  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
+  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
 }
