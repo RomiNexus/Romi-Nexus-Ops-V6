@@ -596,7 +596,8 @@ async function openOpsChat(roomId, type, label) {
 
   document.getElementById('activeChatLabel').textContent = sanitize(label);
   document.getElementById('chatAreaTitle').textContent   = sanitize(label);
-  document.getElementById('opsInputRow').style.display    = type === 'trade' ? 'none' : 'flex';
+  // Input row for trade rooms: shown by default, hidden later if room is pending/closed
+  document.getElementById('opsInputRow').style.display    = 'flex';
   document.getElementById('closeRoomBtn').style.display   = type === 'trade'   ? 'inline-block' : 'none';
   document.getElementById('closeTicketBtn').style.display = type === 'support' ? 'inline-block' : 'none';
   document.getElementById('opsChatMessages').innerHTML = '';
@@ -643,7 +644,9 @@ async function opsApproveCurrent(decision) {
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
-    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
+    // Use getOpsMessages action (ops-authenticated, no membership check)
+    // Falls back to getMessages with opsToken in Authorization header
+    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}&opsToken=${encodeURIComponent(_opsToken)}`;
     if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
 
     const res  = await fetch(url, { headers: { 'Authorization': `Bearer ${_opsToken}` } });
@@ -658,10 +661,9 @@ async function loadOpsChatMessages() {
 
     data.messages.forEach(m => {
       const isOps       = m.message_type === 'SYSTEM';
-      const isEncrypted = !isOps && _activeChatType === 'trade';
 
       const div     = document.createElement('div');
-      div.className = 'ops-msg-row ' + (isOps ? 'mine' : isEncrypted ? 'theirs' : 'theirs');
+      div.className = 'ops-msg-row ' + (isOps ? 'mine' : 'theirs');
 
       const ts    = m.created_at ? new Date(m.created_at) : new Date();
       const gst   = new Date(ts.getTime() + 4*60*60*1000);
@@ -675,17 +677,14 @@ async function loadOpsChatMessages() {
       bubbleEl.className = 'ops-bubble';
       metaEl.className   = 'ops-msg-meta';
 
-      senderEl.textContent = isOps ? '[ROMI DESK]' : '[CLIENT — E2EE]';
+      senderEl.textContent = isOps ? '[ROMI DESK]' : '[CLIENT]';
 
-      if (isEncrypted) {
-        bubbleEl.textContent = '[ENCRYPTED — E2EE — Client messages are AES-256-GCM encrypted. Only SYSTEM messages are visible to ops.]';
-        bubbleEl.style.color = 'var(--text-dim)';
-        bubbleEl.style.fontStyle = 'italic';
-        bubbleEl.style.fontSize = '9px';
-      } else if (isOps) {
-        try { bubbleEl.textContent = atob(m.message_ciphertext || ''); }
-        catch(_) { bubbleEl.textContent = m.message_ciphertext || ''; }
-      } else {
+      // v6.1: all messages (client + ops) are stored as Base64 — decode them
+      // isEncrypted flag removed: client messages are ops-readable in v6.1
+      try {
+        bubbleEl.textContent = decodeURIComponent(escape(atob(m.message_ciphertext || '')));
+      } catch(_) {
+        // fallback: show raw if atob fails (e.g. plain text system message)
         bubbleEl.textContent = m.message_ciphertext || '';
       }
 
