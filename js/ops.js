@@ -693,6 +693,7 @@ async function loadOpsChatMessages() {
       div.appendChild(bubbleEl);
       div.appendChild(metaEl);
       container.appendChild(div);
+      // Store timestamp - next poll uses strict gt so this message won't be re-fetched
       _lastMsgTs = m.created_at;
     });
     container.scrollTop = container.scrollHeight;
@@ -727,7 +728,15 @@ async function opsSendMessage() {
     } else if (data.error === 'OPS SESSION INVALID OR EXPIRED') {
       forceLogout('SESSION EXPIRED — PLEASE LOG IN AGAIN');
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('opsSendMessage error:', e);
+    const container = document.getElementById('opsChatMessages');
+    const errDiv = document.createElement('div');
+    errDiv.className = 'empty-state';
+    errDiv.style.color = 'var(--danger)';
+    errDiv.textContent = 'SEND FAILED — RETRY';
+    container.appendChild(errDiv);
+  }
 }
 
 // ============================================================
