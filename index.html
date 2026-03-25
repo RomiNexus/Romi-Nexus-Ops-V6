@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'sha256-BrQkseIy0qlsVJkDdsTPWnae1B34r5jrNWysONXMaj8=' 'sha256-bYhjZP5m8ibaS0h0Crif94S8DfIhNeZQ4ATPvrat3Q8=' https://fonts.googleapis.com font-src https://fonts.gstatic.com; connect-src 'self' https://rominexus-gateway-v6.vacorp-inquiries.workers.dev https://rominexus-proxy.vacorp-inquiries.workers.dev https://cdnjs.cloudflare.com; img-src 'self' data:; object-src 'none'; frame-ancestors 'none';">  <!-- F-06: sha256 hash replaces unsafe-inline; object-src locked -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'sha256-RJmgWD4S00EcqB04fXjZYNd1LWxIAuj3QvGMqg1yVUI=' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://rominexus-gateway-v6.vacorp-inquiries.workers.dev; img-src 'self' data:; object-src 'none'; frame-ancestors 'none';">
   <title>ROMI NEXUS — OPS COMMAND CENTER v6.1</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -199,7 +199,6 @@
       background: #000; padding: 15px; border-left: 2px solid #555;
       color: #888; font-size: 11px; line-height: 1.6; white-space: pre-wrap;
     }
-    #authStep2 { display: none; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 </head>
@@ -218,23 +217,23 @@
       <div class="auth-label">ACCESS PASSPHRASE</div>
       <input class="auth-input" type="password" id="passphraseInput" placeholder="Enter passphrase"
         autocomplete="off" spellcheck="false"
-        id="passphraseInput">
-      <button class="auth-btn" id="passphraseBtn">REQUEST ACCESS CODE →</button>
+        onkeydown="if(event.key==='Enter')requestOTP()">
+      <button class="auth-btn" id="passphraseBtn" onclick="requestOTP()">REQUEST ACCESS CODE →</button>
       <div class="auth-error" id="authError1"></div>
     </div>
 
     <div id="authStep2" style="display:none;">
       <div class="auth-label">ONE-TIME ACCESS CODE</div>
-      <div class="auth-info" style="margin-bottom:12px;">Code sent to <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="1d726d6e5d6f727074737865686e337e7270">[email&#160;protected]</a>. Valid 10 minutes.</div>
+      <div class="auth-info" style="margin-bottom:12px;">Code sent to <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4827383b083a272521262d303d3b662b2725">[email&#160;protected]</a>. Valid 10 minutes.</div>
       <input class="auth-input" type="text" id="otpInput" placeholder="000000" maxlength="6"
         autocomplete="one-time-code" inputmode="numeric" spellcheck="false"
-        
-        >
-      <button class="auth-btn" id="otpBtn">AUTHENTICATE →</button>
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"
+        onkeydown="if(event.key==='Enter')verifyOpsOTP()">
+      <button class="auth-btn" id="otpBtn" onclick="verifyOpsOTP()">AUTHENTICATE →</button>
       <div class="auth-error" id="authError2"></div>
       <div style="margin-top:10px;text-align:center;">
         <button id="backBtn"
-         
+          onclick="document.getElementById('authStep2').style.display='none';document.getElementById('authStep1').style.display='block';"
           style="background:none;border:none;color:var(--text-muted);font-family:var(--mono);font-size:9px;cursor:pointer;">← BACK</button>
       </div>
     </div>
@@ -246,7 +245,7 @@
   <div class="modal-box">
     <div class="modal-header">
       <span class="modal-title" id="modalTitle">DD REVIEW</span>
-      <button class="modal-close">✕</button>
+      <button class="modal-close" onclick="document.getElementById('ddModal').classList.remove('open')">✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-actions" id="modalActions"></div>
@@ -263,7 +262,7 @@
     <div class="top-bar-right">
       <div id="liveIndicator"><div class="live-dot"></div>LIVE</div>
       <span id="opsClock"></span>
-      <button class="ops-logout-btn">LOGOUT</button>
+      <button class="ops-logout-btn" onclick="opsLogout()">LOGOUT</button>
     </div>
   </div>
 
@@ -286,7 +285,7 @@
         <div class="panel">
           <div class="panel-header">
             <span class="panel-tag">LIVE FEED</span>
-            <button class="refresh-btn" id="refreshBtn">↻ REFRESH</button>
+            <button class="refresh-btn" onclick="loadOpsData()">↻ REFRESH</button>
           </div>
           <div class="feed-list" id="liveFeed"><div class="empty-state">LOADING...</div></div>
         </div>
@@ -296,7 +295,7 @@
             <span class="panel-tag">LEADS BOARD</span>
             <input id="leadSearch" placeholder="Search name / email..."
               style="background:#000;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:3px 8px;outline:none;width:180px;"
-             >
+              oninput="filterLeads(this.value)">
           </div>
           <div class="tbl-scroll">
             <table class="ops-table">
@@ -325,11 +324,11 @@
 
         <div class="panel">
           <div class="ops-tab-bar">
-            <button class="ops-tab active" id="tabBtnDD">
+            <button class="ops-tab active" onclick="switchOpsTab('dd',this)">
               DD QUEUE <span class="badge badge-warn" id="ddBadge" style="display:none">0</span>
             </button>
-            <button class="ops-tab" id="tabBtnMandates">MANDATES</button>
-            <button class="ops-tab" id="tabBtnRooms">
+            <button class="ops-tab" onclick="switchOpsTab('mandates',this)">MANDATES</button>
+            <button class="ops-tab" onclick="switchOpsTab('rooms',this)">
               TRADE ROOMS <span class="badge badge-warn" id="roomsBadge" style="display:none">0</span>
             </button>
           </div>
@@ -368,10 +367,10 @@
             <span class="panel-meta" id="activeChatLabel">SELECT A CONVERSATION</span>
           </div>
           <div class="ops-tab-bar">
-            <button class="ops-tab active" id="chatTabBtnTickets">
+            <button class="ops-tab active" onclick="switchChatView('tickets',this)">
               SUPPORT <span class="badge badge-danger" id="ticketsBadge" style="display:none">0</span>
             </button>
-            <button class="ops-tab" id="chatTabBtnRooms">
+            <button class="ops-tab" onclick="switchChatView('traderooms',this)">
               TRADE ROOMS <span class="badge badge-warn" id="tradeRoomsBadge" style="display:none">0</span>
             </button>
           </div>
@@ -383,8 +382,8 @@
               <div class="chat-area-header">
                 <span id="chatAreaTitle">SELECT A CONVERSATION</span>
                 <div style="display:flex;gap:6px;align-items:center;">
-                  <button class="action-btn close-room" id="closeTicketBtn" style="display:none;">CLOSE TICKET</button>
-                  <button class="action-btn close-room" id="closeRoomBtn"   style="display:none;">CLOSE ROOM</button>
+                  <button class="action-btn close-room" id="closeTicketBtn" style="display:none;" onclick="opsCloseTicket()">CLOSE TICKET</button>
+                  <button class="action-btn close-room" id="closeRoomBtn"   style="display:none;" onclick="opsCloseRoom()">CLOSE ROOM</button>
                 </div>
               </div>
               <div id="roomInfoBar" style="display:none;padding:8px 12px;background:#050505;border-bottom:1px solid var(--border);font-size:9px;">
@@ -392,8 +391,8 @@
                   <div><span style="color:var(--text-dim);">ROOM</span> <span id="roomInfoName" style="color:var(--gold);margin-left:6px;"></span></div>
                   <div><span style="color:var(--text-dim);">STATUS</span> <span id="roomInfoStatus" style="color:var(--text-muted);margin-left:6px;"></span></div>
                   <div id="roomInfoPending" style="display:none;margin-left:auto;display:flex;gap:6px;">
-                    <button class="action-btn approve" id="approveRoomBtn">✓ APPROVE ROOM</button>
-                    <button class="action-btn deny" id="denyRoomBtn">✗ DENY</button>
+                    <button class="action-btn approve" onclick="opsApproveCurrent('APPROVE')">✓ APPROVE ROOM</button>
+                    <button class="action-btn deny"    onclick="opsApproveCurrent('DENY')">✗ DENY</button>
                   </div>
                 </div>
                 <div style="margin-top:4px;font-size:8px;color:var(--text-dim);">
@@ -405,8 +404,8 @@
               </div>
               <div class="ops-input-row" id="opsInputRow" style="display:none;">
                 <textarea class="ops-input" id="opsMessageInput" placeholder="Reply as [ROMI DESK]..." maxlength="2000"
-                 ></textarea>
-                <button class="ops-send" id="opsSendBtn">SEND</button>
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();opsSendMessage();}"></textarea>
+                <button class="ops-send" onclick="opsSendMessage()">SEND</button>
               </div>
             </div>
           </div>
@@ -419,7 +418,7 @@
       <div class="reasoning-box">
         <div style="color:#D4AF37; font-size:10px; letter-spacing:2px; margin-bottom:15px;" id="reasoningHeader">AI AUDIT TRAIL</div>
         <div id="reasoningContent" class="reasoning-text">Loading reasoning chain...</div>
-        <button class="action-btn" id="closeReasoningBtn" style="margin-top:20px; width:100%;">CLOSE AUDIT TRAIL</button>
+        <button class="action-btn" style="margin-top:20px; width:100%;" onclick="closeReasoningModal()">CLOSE AUDIT TRAIL</button>
       </div>
     </div>
 
