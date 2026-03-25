@@ -83,7 +83,7 @@ function updateClock() {
 setInterval(updateClock, 1000); updateClock();
 
 // ── Session restore ──
-window.onload = function() {
+function initializeAuth() {
   try {
     const saved = sessionStorage.getItem('romi-ops-v6-session');
     if (saved) {
@@ -97,7 +97,18 @@ window.onload = function() {
     }
   } catch(_) {}
   try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
-};
+  // Show auth overlay on initial load
+  const authOverlay = document.getElementById('authOverlay');
+  if (authOverlay) authOverlay.style.display = 'flex';
+}
+
+// Run on both DOMContentLoaded and load events to ensure it runs
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeAuth);
+} else {
+  initializeAuth();
+}
+window.addEventListener('load', initializeAuth);
 
 async function verifySessionThenShow() {
   try {
@@ -936,9 +947,8 @@ function closeReasoningModal() {
 // ============================================================
 // UNIVERSAL EVENT DELEGATION (✓ CRITICAL FIX)
 // ============================================================
-document.addEventListener('DOMContentLoaded', function() {
-  // === ALL CLICK HANDLERS ===
-  document.addEventListener('click', function(e) {
+// === ALL CLICK HANDLERS ===
+document.addEventListener('click', function(e) {
     // [data-action] buttons (mandate, room, modal, DD buttons)
     const actionBtn = e.target.closest('[data-action]');
     if (actionBtn) {
@@ -1009,24 +1019,24 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+});
 
-  // === ENTER KEY HANDLERS ===
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      if (e.target.id === 'passphraseInput') requestOTP();
-      if (e.target.id === 'otpInput') verifyOpsOTP();
-      if (e.target.id === 'opsMessageInput' && !e.shiftKey) {
-        e.preventDefault();
-        opsSendMessage();
-      }
+// === ENTER KEY HANDLERS ===
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    if (e.target.id === 'passphraseInput') requestOTP();
+    if (e.target.id === 'otpInput') verifyOpsOTP();
+    if (e.target.id === 'opsMessageInput' && !e.shiftKey) {
+      e.preventDefault();
+      opsSendMessage();
     }
-  });
+  }
+});
 
-  // === OTP NUMERIC INPUT GUARD ===
-  document.addEventListener('input', function(e) {
-    if (e.target.id === 'otpInput') {
-      const cleaned = e.target.value.replace(/\D/g,'').slice(0,6);
-      if (e.target.value !== cleaned) e.target.value = cleaned;
-    }
-  });
+// === OTP NUMERIC INPUT GUARD ===
+document.addEventListener('input', function(e) {
+  if (e.target.id === 'otpInput') {
+    const cleaned = e.target.value.replace(/\D/g,'').slice(0,6);
+    if (e.target.value !== cleaned) e.target.value = cleaned;
+  }
 });
