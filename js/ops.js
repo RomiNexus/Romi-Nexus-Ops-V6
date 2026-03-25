@@ -4,7 +4,6 @@ const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
 // ── DOMPurify safeHTML helpers ──
 const PURIFY_CONFIG = {
   ALLOWED_TAGS: ['b','strong','br','div','span','table','thead','tbody','tr','th','td','button','a','select','option'],
-  // F-07: 'onclick' removed — all dynamic buttons now use data-action + event delegation
   ALLOWED_ATTR: ['style','class','id','colspan','data-id','data-email','data-decision','data-roomid','data-action','data-path','data-active','data-label','href','target','rel'],
   FORCE_BODY: true,
 };
@@ -97,7 +96,6 @@ window.onload = function() {
 
 async function verifySessionThenShow() {
   try {
-    // F-10: opsToken moved to Authorization header — never exposed in URL/logs
     const res  = await fetch(`${API_URL}?action=getOpsData`, {
       headers: { 'Authorization': `Bearer ${_opsToken}` },
     });
@@ -237,7 +235,6 @@ function opsLogout() {
 async function loadOpsData() {
   if (!_opsToken) return;
   try {
-    // F-10: opsToken in Authorization header only
     const res  = await fetch(`${API_URL}?action=getOpsData`, {
       headers: { 'Authorization': `Bearer ${_opsToken}` },
     });
@@ -473,7 +470,12 @@ function openDDModal(btn) {
     actHtml = `<span style="font-size:9px;color:var(--text-muted);">DD PROCESSING IN PROGRESS — AWAITING AI REPORT</span>`;
   }
   if (item.report_pdf_path) {
+    // F-10: fetch+blob so token never touches a URL
     actHtml += `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="padding:8px 16px;font-size:10px;">📄 DOWNLOAD PDF REPORT</button>`;
+  }
+  // F-12: Audit trail button — opens reasoning modal
+  if (item.audit_reasoning) {
+    actHtml += `<button class="action-btn" data-action="audittrail" style="padding:8px 16px;font-size:10px;" data-id="${sanitize(item.id)}">🔍 VIEW AUDIT TRAIL</button>`;
   }
   setHTML(document.getElementById('modalActions'), actHtml);
 
@@ -483,34 +485,37 @@ function openDDModal(btn) {
 function closeModal() {
   document.getElementById('ddModal').classList.remove('open');
 }
-
-// F-10: PDF download — token in Authorization header only, never in URL
+// F-10: PDF download via fetch+blob — token never in URL
 async function downloadDDReport(btn) {
   const path = btn.getAttribute('data-path');
   if (!path || !_opsToken) return;
-  btn.disabled = true;
-  btn.textContent = '...';
+  btn.disabled = true; btn.textContent = '...';
   try {
-    const res = await fetch(
-      `${API_URL}?action=getDDReport&path=${encodeURIComponent(path)}`,
-      { headers: { 'Authorization': `Bearer ${_opsToken}` } }
-    );
-    if (!res.ok) { alert('PDF NOT AVAILABLE'); btn.disabled = false; btn.textContent = 'PDF'; return; }
+    const res = await fetch(`${API_URL}?action=getDDReport&path=${encodeURIComponent(path)}`,
+      { headers: { 'Authorization': `Bearer ${_opsToken}` } });
+    if (!res.ok) { alert('PDF NOT AVAILABLE'); return; }
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `DD_Report_${path.split('/').pop() || 'report'}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch(e) {
-    alert('DOWNLOAD ERROR — RETRY');
-  }
-  btn.disabled = false;
-  btn.textContent = 'PDF';
+    a.href = url; a.download = `DD_Report_${path.split('/').pop()}.pdf`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  } catch(e) { alert('DOWNLOAD ERROR — RETRY'); }
+  btn.disabled = false; btn.textContent = 'PDF';
 }
+
+// F-12: AI Audit Trail modal open/close
+function openReasoningModal(content) {
+  const el = document.getElementById('reasoningContent');
+  const modal = document.getElementById('reasoningModal');
+  if (el) el.textContent = content || 'No audit reasoning available for this record.';
+  if (modal) modal.style.display = 'flex';
+}
+function closeReasoningModal() {
+  const modal = document.getElementById('reasoningModal');
+  if (modal) modal.style.display = 'none';
+}
+
 document.getElementById('ddModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
@@ -572,7 +577,7 @@ function renderDeals(deals) {
   const tbody = document.getElementById('dealsTbody');
   if (!deals.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO DEALS REPORTED</td></tr>'); return; }
   setHTML(tbody, deals.map(d => {
-    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.02).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'; // F-08: 2.0% per FCCO §8
+    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.02).toLocaleString // F-08: 2.0%('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
     return `<tr>
       <td style="font-size:9px;color:var(--gold);">${sanitize(d.commodity||'')}</td>
       <td style="font-size:9px;">${sanitize(String(d.quantity_mt||''))} MT</td>
@@ -679,7 +684,9 @@ async function opsApproveCurrent(decision) {
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
-    // F-10: opsToken only in Authorization header — removed from URL query string
+    // Use getOpsMessages action (ops-authenticated, no membership check)
+    // Falls back to getMessages with opsToken in Authorization header
+    // F-10: opsToken only in Authorization header — removed from URL
     let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
     if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
 
@@ -889,17 +896,15 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('otpBtn')?.addEventListener('click', verifyOpsOTP);
   document.getElementById('passphraseInput')?.addEventListener('keydown', e => { if(e.key==='Enter') requestOTP(); });
   document.getElementById('otpInput')?.addEventListener('keydown', e => { if(e.key==='Enter') verifyOpsOTP(); });
-  // F-07: otp numeric input guard (was inline oninput)
+  // F-07: otp numeric input guard
   document.getElementById('otpInput')?.addEventListener('input', function() {
     this.value = this.value.replace(/\D/g,'').slice(0,6);
   });
   document.querySelector('.modal-close')?.addEventListener('click', closeModal);
   document.querySelector('.ops-logout-btn')?.addEventListener('click', opsLogout);
-  // F-07: back button (was inline onclick with full DOM manipulation)
   document.getElementById('backBtn')?.addEventListener('click', backToPassphrase);
-  // F-07: refresh button
+  // F-07: refresh + lead search
   document.getElementById('refreshBtn')?.addEventListener('click', loadOpsData);
-  // F-07: lead search
   document.getElementById('leadSearch')?.addEventListener('input', function() { filterLeads(this.value); });
   // F-07: DD/Mandates/Rooms tabs
   document.getElementById('tabBtnDD')?.addEventListener('click', function() { switchOpsTab('dd', this); });
@@ -911,41 +916,32 @@ document.addEventListener('DOMContentLoaded', function() {
   // F-07: Approve/deny room buttons
   document.getElementById('approveRoomBtn')?.addEventListener('click', () => opsApproveCurrent('APPROVE'));
   document.getElementById('denyRoomBtn')?.addEventListener('click', () => opsApproveCurrent('DENY'));
-  // Message input and send
+  // Message input + send
   document.getElementById('opsMessageInput')?.addEventListener('keydown', e => {
     if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); opsSendMessage(); }
   });
   document.getElementById('opsSendBtn')?.addEventListener('click', opsSendMessage);
   document.getElementById('closeTicketBtn')?.addEventListener('click', opsCloseTicket);
   document.getElementById('closeRoomBtn')?.addEventListener('click', opsCloseRoom);
+  // F-12: Close reasoning modal
+  document.getElementById('closeReasoningBtn')?.addEventListener('click', closeReasoningModal);
   // F-07: Event delegation for dynamically-rendered table buttons
-  // Replaces all inline onclick in setHTML() template literals
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.getAttribute('data-action');
-
-    if (action === 'review') {
-      openDDModal(btn);
-    }
-    if (action === 'ddbtn') {
-      handleDDBtn(btn);
-    }
-    if (action === 'ddbtn-modal') {
-      handleDDBtn(btn);
-      closeModal();
-    }
-    if (action === 'dlpdf') {
-      downloadDDReport(btn);
-    }
-    if (action === 'roomapprove') {
-      handleRoomApproveBtn(btn);
-    }
-    if (action === 'roomclose') {
-      handleRoomCloseBtn(btn);
-    }
-    if (action === 'chatclick') {
-      handleChatItemClick(btn);
+    if (action === 'review')       { openDDModal(btn); }
+    if (action === 'ddbtn')        { handleDDBtn(btn); }
+    if (action === 'ddbtn-modal')  { handleDDBtn(btn); closeModal(); }
+    if (action === 'dlpdf')        { downloadDDReport(btn); }
+    if (action === 'roomapprove')  { handleRoomApproveBtn(btn); }
+    if (action === 'roomclose')    { handleRoomCloseBtn(btn); }
+    if (action === 'chatclick')    { handleChatItemClick(btn); }
+    if (action === 'audittrail') {
+      // F-12: fetch full reasoning from _opsData to avoid attribute truncation
+      const id = btn.getAttribute('data-id');
+      const ddItem = (_opsData?.ddQueue || []).find(d => d.id === id);
+      openReasoningModal(ddItem?.audit_reasoning || 'No audit trail available.');
     }
   });
 });
