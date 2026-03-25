@@ -1,4 +1,9 @@
-// !! REPLACE WITH YOUR ACTUAL WORKER URL !!
+'use strict';
+// ============================================================
+// ROMI NEXUS — OPS COMMAND CENTER v6.1-sec (FIXED)
+// Event Delegation + Auth Flow Separation
+// ============================================================
+
 const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
 
 // ── DOMPurify safeHTML helpers ──
@@ -118,41 +123,68 @@ async function verifySessionThenShow() {
 // AUTH
 // ============================================================
 async function requestOTP() {
-  const pp  = document.getElementById('passphraseInput').value.trim();
+  const pp  = document.getElementById('passphraseInput');
+  if(!pp) return;
+  const val = (pp.value || '').trim();
   const btn = document.getElementById('passphraseBtn');
   const err = document.getElementById('authError1');
-  if (!pp || pp.length < 8 || pp.length > 128) { showAuthError(err, 'ENTER VALID PASSPHRASE'); return; }
-  btn.disabled = true; btn.textContent = 'SENDING CODE...'; err.style.display = 'none';
+  
+  if (!val || val.length < 8 || val.length > 128) { 
+    showAuthError(err, 'ENTER VALID PASSPHRASE'); 
+    return; 
+  }
+  
+  if(btn) btn.disabled = true;
+  if(btn) btn.textContent = 'SENDING CODE...';
+  if(err) err.style.display = 'none';
+  
   try {
     const res  = await fetch(API_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'opsRequestOTP', passphrase: pp })
+      body: JSON.stringify({ action: 'opsRequestOTP', passphrase: val })
     });
     const data = await res.json();
     if (data.success) {
       _opsToken = '';
-      document.getElementById('_pp').value = pp;
+      document.getElementById('_pp').value = val;
       document.getElementById('authStep1').style.display = 'none';
       document.getElementById('authStep2').style.display = 'block';
       setTimeout(() => document.getElementById('otpInput').focus(), 100);
     } else {
       showAuthError(err, data.error || 'INVALID PASSPHRASE');
-      btn.disabled = false; btn.textContent = 'REQUEST ACCESS CODE →';
+      if(btn) btn.disabled = false;
+      if(btn) btn.textContent = 'REQUEST ACCESS CODE →';
     }
   } catch(e) {
     showAuthError(err, 'NETWORK ERROR — RETRY');
-    btn.disabled = false; btn.textContent = 'REQUEST ACCESS CODE →';
+    if(btn) btn.disabled = false;
+    if(btn) btn.textContent = 'REQUEST ACCESS CODE →';
   }
 }
 
 async function verifyOpsOTP() {
-  const otp = document.getElementById('otpInput').value.trim();
+  const otpInput = document.getElementById('otpInput');
+  if(!otpInput) return;
+  
+  const otp = (otpInput.value || '').trim();
   const pp  = document.getElementById('_pp').value;
   const btn = document.getElementById('otpBtn');
   const err = document.getElementById('authError2');
-  if (!otp || !/^\d{6}$/.test(otp)) { showAuthError(err, 'ENTER 6-DIGIT CODE'); return; }
-  if (!pp) { showAuthError(err, 'SESSION LOST — START AGAIN'); backToPassphrase(); return; }
-  btn.disabled = true; btn.textContent = 'VERIFYING...'; err.style.display = 'none';
+  
+  if (!otp || !/^\d{6}$/.test(otp)) { 
+    showAuthError(err, 'ENTER 6-DIGIT CODE'); 
+    return; 
+  }
+  if (!pp) { 
+    showAuthError(err, 'SESSION LOST — START AGAIN'); 
+    backToPassphrase(); 
+    return; 
+  }
+  
+  if(btn) btn.disabled = true;
+  if(btn) btn.textContent = 'VERIFYING...';
+  if(err) err.style.display = 'none';
+  
   try {
     const res  = await fetch(API_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -172,31 +204,39 @@ async function verifyOpsOTP() {
       showOpsView();
     } else {
       showAuthError(err, data.error || 'INVALID CODE');
-      btn.disabled = false; btn.textContent = 'AUTHENTICATE →';
+      if(btn) btn.disabled = false;
+      if(btn) btn.textContent = 'AUTHENTICATE →';
     }
   } catch(e) {
     showAuthError(err, 'NETWORK ERROR — RETRY');
-    btn.disabled = false; btn.textContent = 'AUTHENTICATE →';
+    if(btn) btn.disabled = false;
+    if(btn) btn.textContent = 'AUTHENTICATE →';
   }
 }
 
 function backToPassphrase() {
   document.getElementById('authStep2').style.display = 'none';
   document.getElementById('authStep1').style.display = 'block';
-  document.getElementById('passphraseBtn').disabled  = false;
-  document.getElementById('passphraseBtn').textContent = 'REQUEST ACCESS CODE →';
-  document.getElementById('otpInput').value = '';
-  document.getElementById('_pp').value      = '';
+  const btn = document.getElementById('passphraseBtn');
+  if(btn) btn.disabled  = false;
+  if(btn) btn.textContent = 'REQUEST ACCESS CODE →';
+  const otpInput = document.getElementById('otpInput');
+  if(otpInput) otpInput.value = '';
+  const ppInput = document.getElementById('_pp');
+  if(ppInput) ppInput.value      = '';
 }
 
 function showAuthError(el, msg) {
+  if(!el) return;
   el.textContent   = String(msg).substring(0, 120);
   el.style.display = 'block';
 }
 
 function showOpsView() {
-  document.getElementById('authView').style.display = 'none';
-  document.getElementById('opsView').style.display  = 'block';
+  const authOverlay = document.getElementById('authOverlay');
+  const appView = document.getElementById('opsView');
+  if(authOverlay) authOverlay.style.display = 'none';
+  if(appView) appView.style.display  = 'block';
   loadOpsData();
   _pollInterval = setInterval(loadOpsData, 20000);
   resetIdleTimer();
@@ -208,19 +248,32 @@ function forceLogout(reason) {
   clearTimeout(_idleTimer);
   _opsToken = ''; _opsData = null; _loadFailCount = 0;
   try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
-  document.getElementById('opsView').style.display   = 'none';
-  document.getElementById('authView').style.display  = 'flex';
-  document.getElementById('authStep1').style.display = 'block';
-  document.getElementById('authStep2').style.display = 'none';
-  document.getElementById('passphraseInput').value   = '';
-  document.getElementById('otpInput').value          = '';
-  document.getElementById('_pp').value               = '';
-  document.getElementById('passphraseBtn').disabled  = false;
-  document.getElementById('passphraseBtn').textContent = 'REQUEST ACCESS CODE →';
+  
+  const opsView = document.getElementById('opsView');
+  const authOverlay = document.getElementById('authOverlay');
+  if(opsView) opsView.style.display   = 'none';
+  if(authOverlay) authOverlay.style.display  = 'flex';
+  
+  const step1 = document.getElementById('authStep1');
+  const step2 = document.getElementById('authStep2');
+  if(step1) step1.style.display = 'block';
+  if(step2) step2.style.display = 'none';
+  
+  const passphraseInput = document.getElementById('passphraseInput');
+  const otpInput = document.getElementById('otpInput');
+  const ppInput = document.getElementById('_pp');
+  if(passphraseInput) passphraseInput.value   = '';
+  if(otpInput) otpInput.value          = '';
+  if(ppInput) ppInput.value               = '';
+  
+  const passphraseBtn = document.getElementById('passphraseBtn');
+  if(passphraseBtn) passphraseBtn.disabled  = false;
+  if(passphraseBtn) passphraseBtn.textContent = 'REQUEST ACCESS CODE →';
+  
   if (reason) {
     const err = document.getElementById('authError1');
-    err.textContent    = reason;
-    err.style.display  = 'block';
+    if(err) err.textContent    = reason;
+    if(err) err.style.display  = 'block';
   }
 }
 
@@ -280,8 +333,8 @@ function renderStats(s) {
   document.getElementById('totalCommMeta').textContent  = 'TOTAL: $' + comm.toLocaleString();
   const ddBadge    = document.getElementById('ddBadge');
   const roomsBadge = document.getElementById('roomsBadge');
-  if ((s.pendingDD||0) > 0)    { ddBadge.style.display='inline-block';    ddBadge.textContent=s.pendingDD; }    else ddBadge.style.display='none';
-  if ((s.pendingRooms||0) > 0) { roomsBadge.style.display='inline-block'; roomsBadge.textContent=s.pendingRooms; } else roomsBadge.style.display='none';
+  if ((s.pendingDD||0) > 0)    { if(ddBadge) { ddBadge.style.display='inline-block';    ddBadge.textContent=s.pendingDD; } }    else if(ddBadge) ddBadge.style.display='none';
+  if ((s.pendingRooms||0) > 0) { if(roomsBadge) { roomsBadge.style.display='inline-block'; roomsBadge.textContent=s.pendingRooms; } } else if(roomsBadge) roomsBadge.style.display='none';
 }
 
 // ── Live Feed ──
@@ -300,7 +353,7 @@ function renderFeed(d) {
   (d.leads||[]).slice(0,5).forEach(l =>
     items.push({ type:'new-lead', text:`LEAD: ${l.full_name||l.email} — ${l.is_approved?'APPROVED':'PENDING'}`, time: l.created_at })
   );
-  if (!items.length) { feed.textContent = ''; const e=document.createElement('div'); e.className='empty-state'; e.textContent='NO RECENT ACTIVITY'; feed.appendChild(e); return; }
+  if (!items.length) { if(feed) feed.textContent = ''; const e=document.createElement('div'); e.className='empty-state'; e.textContent='NO RECENT ACTIVITY'; if(feed) feed.appendChild(e); return; }
   setHTML(feed, items.slice(0,20).map(item =>
     `<div class="feed-item">
       <div class="feed-dot ${sanitize(item.type)}"></div>
@@ -313,7 +366,7 @@ function renderFeed(d) {
 // ── Leads ──
 function renderLeads(leads) {
   _allLeads = leads;
-  filterLeads(document.getElementById('leadSearch').value || '');
+  filterLeads(document.getElementById('leadSearch')?.value || '');
 }
 
 function filterLeads(q) {
@@ -374,19 +427,384 @@ function renderDD(queue) {
   }).join(''));
 }
 
-function handleDDBtn(btn) {
-  const email    = btn.getAttribute('data-email');
-  const decision = btn.getAttribute('data-decision');
-  if (!email || !decision) return;
-  opsDD(email, decision);
+// ── Mandates ──
+function renderMandates(mandates) {
+  const tbody = document.getElementById('mandatesTbody');
+  if (!mandates.length) { setHTML(tbody, '<tr><td colspan="6" class="empty-state">NO ACTIVE MANDATES</td></tr>'); return; }
+  setHTML(tbody, mandates.map(m =>
+    `<tr>
+      <td><span class="pill pill-${sanitize((m.mandate_type||'buy').toLowerCase())}">${sanitize(m.mandate_type||'')}</span></td>
+      <td style="color:var(--gold);font-size:10px;">${sanitize(m.commodity||'')}</td>
+      <td style="font-size:9px;">${sanitize(String(m.quantity_mt||''))} MT</td>
+      <td style="font-size:9px;">${m.price_usd_per_mt ? '$'+sanitize(String(m.price_usd_per_mt)) : 'NEGOTIABLE'}</td>
+      <td style="font-size:9px;">${sanitize(m.incoterms||'—')}</td>
+      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(m.created_at)}</td>
+    </tr>`
+  ).join(''));
 }
 
+// ── Trade Rooms table ──
+function renderRoomsTable(rooms) {
+  const tbody = document.getElementById('roomsTbody');
+  if (!rooms.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO TRADE ROOMS</td></tr>'); return; }
+  setHTML(tbody, rooms.map(r => {
+    const isPending = r.status === 'PENDING_APPROVAL';
+    const sc        = isPending ? 'status-review' : r.status === 'ACTIVE' ? 'status-approved' : 'status-denied';
+    const safeId    = sanitize(r.id||'');
+    return `<tr>
+      <td style="font-size:9px;color:var(--gold);">${sanitize(r.room_name||safeId)}</td>
+      <td style="font-size:9px;">${sanitize(r.commodity||'—')}</td>
+      <td><span class="${sc}">${sanitize(r.status||'')}</span></td>
+      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(r.created_at)}</td>
+      <td><div style="display:flex;gap:3px;flex-wrap:wrap;">
+        ${isPending
+          ? `<button class="action-btn approve" data-roomid="${safeId}" data-decision="APPROVE" data-action="roomapprove">✓ APPROVE</button>
+             <button class="action-btn deny"    data-roomid="${safeId}" data-decision="DENY"    data-action="roomapprove">✗ DENY</button>`
+          : ''}
+        ${r.status === 'ACTIVE'
+          ? `<button class="action-btn close-room" data-roomid="${safeId}" data-action="roomclose">CLOSE</button>`
+          : ''}
+      </div></td>
+    </tr>`;
+  }).join(''));
+}
+
+// ── Deals ──
+function renderDeals(deals) {
+  const tbody = document.getElementById('dealsTbody');
+  if (!deals.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO DEALS REPORTED</td></tr>'); return; }
+  setHTML(tbody, deals.map(d => {
+    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.02).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+    return `<tr>
+      <td style="font-size:9px;color:var(--gold);">${sanitize(d.commodity||'')}</td>
+      <td style="font-size:9px;">${sanitize(String(d.quantity_mt||''))} MT</td>
+      <td style="font-size:9px;">$${sanitize(String(d.value_usd||'0'))}</td>
+      <td style="font-size:9px;color:var(--success);">$${comm}</td>
+      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(d.closed_at)}</td>
+    </tr>`;
+  }).join(''));
+}
+
+// ── Chat list ──
+function renderChatList(tickets, rooms) {
+  const panel = document.getElementById('chatListPanel');
+  if (_chatView === 'tickets') {
+    const tb = document.getElementById('ticketsBadge');
+    if (tickets.length > 0) { if(tb) { tb.style.display='inline-block'; tb.textContent=tickets.length; } } else if(tb) tb.style.display='none';
+    if (!tickets.length) { setHTML(panel, '<div class="empty-state" style="padding:16px;">NO OPEN TICKETS</div>'); return; }
+    setHTML(panel, tickets.map(t =>
+      `<div class="chat-list-item${_activeChatId===t.id?' active':''}"
+        data-id="${sanitize(t.id)}" data-type="support" data-label="${sanitize(t.subject||'Support')}"
+        data-action="chatclick">
+        <div class="cli-name">${sanitize(t.subject||'Support Ticket')}</div>
+        <div class="cli-sub">${sanitize(t.status||'')} · ${timeAgo(t.updated_at)}</div>
+      </div>`
+    ).join(''));
+  } else {
+    const rb = document.getElementById('tradeRoomsBadge');
+    const activeRooms = rooms.filter(r => r.status === 'ACTIVE' || r.status === 'PENDING_APPROVAL');
+    if (activeRooms.length > 0) { if(rb) { rb.style.display='inline-block'; rb.textContent=activeRooms.length; } } else if(rb) rb.style.display='none';
+    if (!activeRooms.length) { setHTML(panel, '<div class="empty-state" style="padding:16px;">NO ACTIVE TRADE ROOMS</div>'); return; }
+    setHTML(panel, activeRooms.map(r =>
+      `<div class="chat-list-item${_activeChatId===r.id?' active':''}"
+        data-id="${sanitize(r.id)}" data-type="trade" data-label="${sanitize(r.room_name||r.commodity||r.id)}"
+        data-action="chatclick">
+        <div class="cli-name">${sanitize(r.room_name||r.commodity||'Trade Room')}</div>
+        <div class="cli-sub">${sanitize(r.status||'')} · ${timeAgo(r.updated_at)}</div>
+      </div>`
+    ).join(''));
+  }
+}
+
+// ============================================================
+// OPS ACTIONS (✓ FIXED: These handlers receive proper delegation)
+// ============================================================
+async function opsDD(email, decision) {
+  if (!confirm(`${decision === 'APPROVED' ? 'APPROVE' : 'REJECT'} DD application for ${email}?`)) return;
+  let reason = '';
+  if (decision === 'REJECTED') {
+    reason = prompt('Rejection reason (shown internally):') || 'Rejected by ops.';
+  }
+  try {
+    const action = decision === 'APPROVED' ? 'approveDDReview' : 'rejectDDReview';
+    const body   = { action, email, token: _opsToken };
+    if (reason) body.reason = reason;
+    const res    = await fetch(API_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_opsToken}` },
+      body:    JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    alert(`✓ DD ${decision} recorded for ${email}`);
+    setTimeout(loadOpsData, 1000);
+  } catch(e) { alert('NETWORK ERROR — RETRY'); }
+}
+
+async function opsApproveRoom(roomId, decision) {
+  if (!confirm(`${decision} trade room?`)) return;
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'approveRoom', opsToken: _opsToken, roomId, decision })
+    });
+    const data = await res.json();
+    if (data.success) loadOpsData();
+    else alert(data.error || 'ACTION FAILED');
+  } catch(e) { alert('NETWORK ERROR'); }
+}
+
+async function opsApproveCloseRoom(roomId) {
+  const id = roomId || _activeChatId;
+  if (!id) return;
+  if (!confirm('Close this trade room? All messages are retained for compliance.')) return;
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'closeRoom', opsToken: _opsToken, roomId: id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      _activeChatId = null; _lastMsgTs = null;
+      if (_chatInterval) clearInterval(_chatInterval);
+      const msgContainer = document.getElementById('opsChatMessages');
+      if(msgContainer) msgContainer.textContent  = '';
+      const e = document.createElement('div'); e.className='empty-state'; e.textContent='Room closed — messages retained for compliance';
+      if(msgContainer) msgContainer.appendChild(e);
+      const inputRow = document.getElementById('opsInputRow');
+      if(inputRow) inputRow.style.display  = 'none';
+      const closeBtn = document.getElementById('closeRoomBtn');
+      if(closeBtn) closeBtn.style.display = 'none';
+      const roomInfoBar = document.getElementById('roomInfoBar');
+      if(roomInfoBar) roomInfoBar.style.display  = 'none';
+      const title = document.getElementById('chatAreaTitle');
+      if(title) title.textContent  = 'SELECT A CONVERSATION';
+      loadOpsData();
+    } else alert(data.error||'FAILED');
+  } catch(e) { alert('NETWORK ERROR'); }
+}
+
+async function opsCloseTicket() {
+  if (!_activeChatId) return;
+  if (!confirm('Close this support ticket? All messages are retained.')) return;
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'closeTicket', opsToken: _opsToken, ticketId: _activeChatId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      _activeChatId = null; _lastMsgTs = null;
+      if (_chatInterval) clearInterval(_chatInterval);
+      const msgContainer = document.getElementById('opsChatMessages');
+      if(msgContainer) msgContainer.textContent    = '';
+      const e = document.createElement('div'); e.className='empty-state'; e.textContent='Ticket closed — messages retained for compliance';
+      if(msgContainer) msgContainer.appendChild(e);
+      const inputRow = document.getElementById('opsInputRow');
+      if(inputRow) inputRow.style.display    = 'none';
+      const closeBtn = document.getElementById('closeTicketBtn');
+      if(closeBtn) closeBtn.style.display = 'none';
+      const roomInfoBar = document.getElementById('roomInfoBar');
+      if(roomInfoBar) roomInfoBar.style.display    = 'none';
+      const title = document.getElementById('chatAreaTitle');
+      if(title) title.textContent    = 'SELECT A CONVERSATION';
+      loadOpsData();
+    } else alert(data.error || 'FAILED TO CLOSE TICKET');
+  } catch(e) { alert('NETWORK ERROR'); }
+}
+
+// ── Tab switches ──
+function switchOpsTab(tab, btn) {
+  if(btn) {
+    const siblings = btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab');
+    siblings.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  ['dd','mandates','rooms'].forEach(t => {
+    const el = document.getElementById('opsTab-'+t);
+    if (el) el.style.display = 'none';
+  });
+  const pane = document.getElementById('opsTab-'+tab);
+  if (pane) pane.style.display = 'block';
+}
+
+function switchChatView(view, btn) {
+  _chatView = view;
+  if(btn) {
+    const siblings = btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab');
+    siblings.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
+}
+
+// ── Chat ──
+async function openOpsChat(roomId, type, label) {
+  _activeChatId   = roomId;
+  _activeChatType = type;
+  _lastMsgTs      = null;
+
+  const labelEl = document.getElementById('activeChatLabel');
+  const titleEl = document.getElementById('chatAreaTitle');
+  if(labelEl) labelEl.textContent = sanitize(label);
+  if(titleEl) titleEl.textContent   = sanitize(label);
+  
+  const inputRow = document.getElementById('opsInputRow');
+  const closeRoomBtn = document.getElementById('closeRoomBtn');
+  const closeTicketBtn = document.getElementById('closeTicketBtn');
+  
+  if(inputRow) inputRow.style.display    = 'flex';
+  if(closeRoomBtn) closeRoomBtn.style.display   = type === 'trade'   ? 'inline-block' : 'none';
+  if(closeTicketBtn) closeTicketBtn.style.display = type === 'support' ? 'inline-block' : 'none';
+  
+  const msgContainer = document.getElementById('opsChatMessages');
+  if(msgContainer) msgContainer.innerHTML = '';
+  const emptyDiv = document.createElement('div');
+  emptyDiv.className = 'empty-state';
+  emptyDiv.textContent = 'LOADING...';
+  if(msgContainer) msgContainer.appendChild(emptyDiv);
+
+  // Room info bar
+  const infoBar = document.getElementById('roomInfoBar');
+  if (type === 'trade' && _opsData) {
+    const room = (_opsData.rooms||[]).find(r => r.id === roomId);
+    if (room && infoBar) {
+      infoBar.style.display = 'block';
+      const nameEl = document.getElementById('roomInfoName');
+      const statusEl = document.getElementById('roomInfoStatus');
+      const pendingBtns = document.getElementById('roomInfoPending');
+      if(nameEl) nameEl.textContent   = sanitize(room.room_name || roomId);
+      if(statusEl) statusEl.textContent = sanitize(room.status || '');
+      const isPending = room.status === 'PENDING_APPROVAL';
+      if(pendingBtns) pendingBtns.style.display = isPending ? 'flex' : 'none';
+      if(inputRow) inputRow.style.display     = room.status === 'ACTIVE' ? 'flex' : 'none';
+    }
+  } else {
+    if(infoBar) infoBar.style.display = 'none';
+  }
+
+  await loadOpsChatMessages();
+  try {
+    await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'opsMarkRead', opsToken: _opsToken, roomId })
+    });
+  } catch(_) {}
+  if (_chatInterval) clearInterval(_chatInterval);
+  _chatInterval = setInterval(loadOpsChatMessages, 10000);
+  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
+}
+
+async function opsApproveCurrent(decision) {
+  if (!_activeChatId) return;
+  await opsApproveRoom(_activeChatId, decision);
+  const pendingBtns = document.getElementById('roomInfoPending');
+  const inputRow = document.getElementById('opsInputRow');
+  if(pendingBtns) pendingBtns.style.display = 'none';
+  if(inputRow) inputRow.style.display     = decision === 'APPROVE' ? 'flex' : 'none';
+}
+
+async function loadOpsChatMessages() {
+  if (!_activeChatId || !_opsToken) return;
+  try {
+    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
+    if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
+
+    const res  = await fetch(url, { headers: { 'Authorization': `Bearer ${_opsToken}` } });
+    const data = await res.json();
+    const container = document.getElementById('opsChatMessages');
+
+    if (!data.messages || !data.messages.length) {
+      if (!_lastMsgTs && container) { container.textContent=''; const e=document.createElement('div'); e.className='empty-state'; e.textContent='NO MESSAGES YET'; container.appendChild(e); }
+      return;
+    }
+    if (!_lastMsgTs && container) container.textContent = '';
+
+    data.messages.forEach(m => {
+      const isOps       = m.message_type === 'SYSTEM';
+      const div     = document.createElement('div');
+      div.className = 'ops-msg-row ' + (isOps ? 'mine' : 'theirs');
+
+      const ts    = m.created_at ? new Date(m.created_at) : new Date();
+      const gst   = new Date(ts.getTime() + 4*60*60*1000);
+      const tStr  = String(gst.getUTCHours()).padStart(2,'0')+':'+String(gst.getUTCMinutes()).padStart(2,'0')+' GST';
+
+      const senderEl = document.createElement('div');
+      const bubbleEl = document.createElement('div');
+      const metaEl   = document.createElement('div');
+
+      senderEl.className = 'ops-msg-sender';
+      bubbleEl.className = 'ops-bubble';
+      metaEl.className   = 'ops-msg-meta';
+
+      senderEl.textContent = isOps ? '[ROMI DESK]' : '[CLIENT]';
+
+      try {
+        bubbleEl.textContent = decodeURIComponent(escape(atob(m.message_ciphertext || '')));
+      } catch(_) {
+        bubbleEl.textContent = m.message_ciphertext || '';
+      }
+
+      metaEl.textContent = tStr;
+      div.appendChild(senderEl);
+      div.appendChild(bubbleEl);
+      div.appendChild(metaEl);
+      if(container) container.appendChild(div);
+      _lastMsgTs = m.created_at;
+    });
+    if(container) container.scrollTop = container.scrollHeight;
+  } catch(e) {
+    const container = document.getElementById('opsChatMessages');
+    if (!_lastMsgTs && container) { container.textContent=''; const e2=document.createElement('div'); e2.className='empty-state'; e2.textContent='ERROR LOADING — RETRY'; container.appendChild(e2); }
+  }
+}
+
+async function opsSendMessage() {
+  if (!_activeChatId || !_opsToken) return;
+  const input = document.getElementById('opsMessageInput');
+  const msg   = (input?.value || '').trim();
+  if (!msg) return;
+  if (msg.length > 2000) { alert('MESSAGE TOO LONG — MAX 2000 CHARACTERS'); return; }
+  if(input) input.value = '';
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:   'opsReply',
+        opsToken: _opsToken,
+        roomId:   _activeChatId,
+        message:  msg,
+        roomType: _activeChatType || 'support'
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      _lastMsgTs = null;
+      await loadOpsChatMessages();
+    } else if (data.error === 'OPS SESSION INVALID OR EXPIRED') {
+      forceLogout('SESSION EXPIRED — PLEASE LOG IN AGAIN');
+    }
+  } catch(e) {
+    console.error('opsSendMessage error:', e);
+    const container = document.getElementById('opsChatMessages');
+    const errDiv = document.createElement('div');
+    errDiv.className = 'empty-state';
+    errDiv.style.color = 'var(--danger)';
+    errDiv.textContent = 'SEND FAILED — RETRY';
+    if(container) container.appendChild(errDiv);
+  }
+}
+
+// ============================================================
+// DD MODAL (✓ FIXED: Proper DOM construction, no innerHTML)
+// ============================================================
 function openDDModal(btn) {
   const id   = btn.getAttribute('data-id');
   const item = (_opsData?.ddQueue || []).find(d => d.id === id);
   if (!item) return;
 
-  document.getElementById('modalTitle').textContent = `DD REVIEW — ${item.company_name || item.applicant_email}`;
+  const modalTitle = document.getElementById('modalTitle');
+  if(modalTitle) modalTitle.textContent = `DD REVIEW — ${item.company_name || item.applicant_email}`;
 
   const pillarScores = item.pillar_scores || {};
   const missingDocs  = item.missing_docs  || [];
@@ -470,22 +888,22 @@ function openDDModal(btn) {
     actHtml = `<span style="font-size:9px;color:var(--text-muted);">DD PROCESSING IN PROGRESS — AWAITING AI REPORT</span>`;
   }
   if (item.report_pdf_path) {
-    // F-10: fetch+blob so token never touches a URL
     actHtml += `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="padding:8px 16px;font-size:10px;">📄 DOWNLOAD PDF REPORT</button>`;
   }
-  // F-12: Audit trail button — opens reasoning modal
   if (item.audit_reasoning) {
     actHtml += `<button class="action-btn" data-action="audittrail" style="padding:8px 16px;font-size:10px;" data-id="${sanitize(item.id)}">🔍 VIEW AUDIT TRAIL</button>`;
   }
   setHTML(document.getElementById('modalActions'), actHtml);
 
-  document.getElementById('ddModal').classList.add('open');
+  const overlay = document.getElementById('ddModal');
+  if(overlay) overlay.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('ddModal').classList.remove('open');
+  const overlay = document.getElementById('ddModal');
+  if(overlay) overlay.classList.remove('open');
 }
-// F-10: PDF download via fetch+blob — token never in URL
+
 async function downloadDDReport(btn) {
   const path = btn.getAttribute('data-path');
   if (!path || !_opsToken) return;
@@ -504,7 +922,6 @@ async function downloadDDReport(btn) {
   btn.disabled = false; btn.textContent = 'PDF';
 }
 
-// F-12: AI Audit Trail modal open/close
 function openReasoningModal(content) {
   const el = document.getElementById('reasoningContent');
   const modal = document.getElementById('reasoningModal');
@@ -516,432 +933,100 @@ function closeReasoningModal() {
   if (modal) modal.style.display = 'none';
 }
 
-document.getElementById('ddModal').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
-
-// ── Mandates ──
-function renderMandates(mandates) {
-  const tbody = document.getElementById('mandatesTbody');
-  if (!mandates.length) { setHTML(tbody, '<tr><td colspan="6" class="empty-state">NO ACTIVE MANDATES</td></tr>'); return; }
-  setHTML(tbody, mandates.map(m =>
-    `<tr>
-      <td><span class="pill pill-${sanitize((m.mandate_type||'buy').toLowerCase())}">${sanitize(m.mandate_type||'')}</span></td>
-      <td style="color:var(--gold);font-size:10px;">${sanitize(m.commodity||'')}</td>
-      <td style="font-size:9px;">${sanitize(String(m.quantity_mt||''))} MT</td>
-      <td style="font-size:9px;">${m.price_usd_per_mt ? '$'+sanitize(String(m.price_usd_per_mt)) : 'NEGOTIABLE'}</td>
-      <td style="font-size:9px;">${sanitize(m.incoterms||'—')}</td>
-      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(m.created_at)}</td>
-    </tr>`
-  ).join(''));
-}
-
-// ── Trade Rooms table ──
-function renderRoomsTable(rooms) {
-  const tbody = document.getElementById('roomsTbody');
-  if (!rooms.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO TRADE ROOMS</td></tr>'); return; }
-  setHTML(tbody, rooms.map(r => {
-    const isPending = r.status === 'PENDING_APPROVAL';
-    const sc        = isPending ? 'status-review' : r.status === 'ACTIVE' ? 'status-approved' : 'status-denied';
-    const safeId    = sanitize(r.id||'');
-    return `<tr>
-      <td style="font-size:9px;color:var(--gold);">${sanitize(r.room_name||safeId)}</td>
-      <td style="font-size:9px;">${sanitize(r.commodity||'—')}</td>
-      <td><span class="${sc}">${sanitize(r.status||'')}</span></td>
-      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(r.created_at)}</td>
-      <td><div style="display:flex;gap:3px;flex-wrap:wrap;">
-        ${isPending
-          ? `<button class="action-btn approve" data-roomid="${safeId}" data-decision="APPROVE" data-action="roomapprove">✓ APPROVE</button>
-             <button class="action-btn deny"    data-roomid="${safeId}" data-decision="DENY"    data-action="roomapprove">✗ DENY</button>`
-          : ''}
-        ${r.status === 'ACTIVE'
-          ? `<button class="action-btn close-room" data-roomid="${safeId}" data-action="roomclose">CLOSE</button>`
-          : ''}
-      </div></td>
-    </tr>`;
-  }).join(''));
-}
-
-function handleRoomApproveBtn(btn) {
-  const roomId   = btn.getAttribute('data-roomid');
-  const decision = btn.getAttribute('data-decision');
-  if (roomId && decision) opsApproveRoom(roomId, decision);
-}
-function handleRoomCloseBtn(btn) {
-  const roomId = btn.getAttribute('data-roomid');
-  if (roomId) opsApproveCloseRoom(roomId);
-}
-
-// ── Deals ──
-function renderDeals(deals) {
-  const tbody = document.getElementById('dealsTbody');
-  if (!deals.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO DEALS REPORTED</td></tr>'); return; }
-  setHTML(tbody, deals.map(d => {
-    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.02).toLocaleString // F-08: 2.0%('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
-    return `<tr>
-      <td style="font-size:9px;color:var(--gold);">${sanitize(d.commodity||'')}</td>
-      <td style="font-size:9px;">${sanitize(String(d.quantity_mt||''))} MT</td>
-      <td style="font-size:9px;">$${sanitize(String(d.value_usd||'0'))}</td>
-      <td style="font-size:9px;color:var(--success);">$${comm}</td>
-      <td style="font-size:8px;color:var(--text-dim);">${timeAgo(d.closed_at)}</td>
-    </tr>`;
-  }).join(''));
-}
-
-// ── Chat list ──
-function renderChatList(tickets, rooms) {
-  const panel = document.getElementById('chatListPanel');
-  if (_chatView === 'tickets') {
-    const tb = document.getElementById('ticketsBadge');
-    if (tickets.length > 0) { tb.style.display='inline-block'; tb.textContent=tickets.length; } else tb.style.display='none';
-    if (!tickets.length) { setHTML(panel, '<div class="empty-state" style="padding:16px;">NO OPEN TICKETS</div>'); return; }
-    setHTML(panel, tickets.map(t =>
-      `<div class="chat-list-item${_activeChatId===t.id?' active':''}"
-        data-id="${sanitize(t.id)}" data-type="support" data-label="${sanitize(t.subject||'Support')}"
-        data-action="chatclick">
-        <div class="cli-name">${sanitize(t.subject||'Support Ticket')}</div>
-        <div class="cli-sub">${sanitize(t.status||'')} · ${timeAgo(t.updated_at)}</div>
-      </div>`
-    ).join(''));
-  } else {
-    const rb = document.getElementById('tradeRoomsBadge');
-    const activeRooms = rooms.filter(r => r.status === 'ACTIVE' || r.status === 'PENDING_APPROVAL');
-    if (activeRooms.length > 0) { rb.style.display='inline-block'; rb.textContent=activeRooms.length; } else rb.style.display='none';
-    if (!activeRooms.length) { setHTML(panel, '<div class="empty-state" style="padding:16px;">NO ACTIVE TRADE ROOMS</div>'); return; }
-    setHTML(panel, activeRooms.map(r =>
-      `<div class="chat-list-item${_activeChatId===r.id?' active':''}"
-        data-id="${sanitize(r.id)}" data-type="trade" data-label="${sanitize(r.room_name||r.commodity||r.id)}"
-        data-action="chatclick">
-        <div class="cli-name">${sanitize(r.room_name||r.commodity||'Trade Room')}</div>
-        <div class="cli-sub">${sanitize(r.status||'')} · ${timeAgo(r.updated_at)}</div>
-      </div>`
-    ).join(''));
-  }
-}
-
-function handleChatItemClick(el) {
-  const id    = el.getAttribute('data-id');
-  const type  = el.getAttribute('data-type');
-  const label = el.getAttribute('data-label');
-  if (id && type && label) openOpsChat(id, type, label);
-}
-
 // ============================================================
-// OPS CHAT
+// UNIVERSAL EVENT DELEGATION (✓ CRITICAL FIX)
 // ============================================================
-async function openOpsChat(roomId, type, label) {
-  _activeChatId   = roomId;
-  _activeChatType = type;
-  _lastMsgTs      = null;
-
-  document.getElementById('activeChatLabel').textContent = sanitize(label);
-  document.getElementById('chatAreaTitle').textContent   = sanitize(label);
-  // Input row for trade rooms: shown by default, hidden later if room is pending/closed
-  document.getElementById('opsInputRow').style.display    = 'flex';
-  document.getElementById('closeRoomBtn').style.display   = type === 'trade'   ? 'inline-block' : 'none';
-  document.getElementById('closeTicketBtn').style.display = type === 'support' ? 'inline-block' : 'none';
-  document.getElementById('opsChatMessages').innerHTML = '';
-  const emptyDiv = document.createElement('div');
-  emptyDiv.className = 'empty-state';
-  emptyDiv.textContent = 'LOADING...';
-  document.getElementById('opsChatMessages').appendChild(emptyDiv);
-
-  // Room info bar
-  const infoBar = document.getElementById('roomInfoBar');
-  if (type === 'trade' && _opsData) {
-    const room = (_opsData.rooms||[]).find(r => r.id === roomId);
-    if (room) {
-      infoBar.style.display = 'block';
-      document.getElementById('roomInfoName').textContent   = sanitize(room.room_name || roomId);
-      document.getElementById('roomInfoStatus').textContent = sanitize(room.status || '');
-      const isPending = room.status === 'PENDING_APPROVAL';
-      document.getElementById('roomInfoPending').style.display = isPending ? 'flex' : 'none';
-      document.getElementById('opsInputRow').style.display     = room.status === 'ACTIVE' ? 'flex' : 'none';
-    }
-  } else {
-    infoBar.style.display = 'none';
-  }
-
-  await loadOpsChatMessages();
-  try {
-    await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'opsMarkRead', opsToken: _opsToken, roomId })
-    });
-  } catch(_) {}
-  if (_chatInterval) clearInterval(_chatInterval);
-  _chatInterval = setInterval(loadOpsChatMessages, 10000);
-  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
-}
-
-async function opsApproveCurrent(decision) {
-  if (!_activeChatId) return;
-  await opsApproveRoom(_activeChatId, decision);
-  document.getElementById('roomInfoPending').style.display = 'none';
-  document.getElementById('opsInputRow').style.display     = decision === 'APPROVE' ? 'flex' : 'none';
-}
-
-async function loadOpsChatMessages() {
-  if (!_activeChatId || !_opsToken) return;
-  try {
-    // Use getOpsMessages action (ops-authenticated, no membership check)
-    // Falls back to getMessages with opsToken in Authorization header
-    // F-10: opsToken only in Authorization header — removed from URL
-    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
-    if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
-
-    const res  = await fetch(url, { headers: { 'Authorization': `Bearer ${_opsToken}` } });
-    const data = await res.json();
-    const container = document.getElementById('opsChatMessages');
-
-    if (!data.messages || !data.messages.length) {
-      if (!_lastMsgTs) { container.textContent=''; const e=document.createElement('div'); e.className='empty-state'; e.textContent='NO MESSAGES YET'; container.appendChild(e); }
-      return;
-    }
-    if (!_lastMsgTs) container.textContent = '';
-
-    data.messages.forEach(m => {
-      const isOps       = m.message_type === 'SYSTEM';
-
-      const div     = document.createElement('div');
-      div.className = 'ops-msg-row ' + (isOps ? 'mine' : 'theirs');
-
-      const ts    = m.created_at ? new Date(m.created_at) : new Date();
-      const gst   = new Date(ts.getTime() + 4*60*60*1000);
-      const tStr  = String(gst.getUTCHours()).padStart(2,'0')+':'+String(gst.getUTCMinutes()).padStart(2,'0')+' GST';
-
-      const senderEl = document.createElement('div');
-      const bubbleEl = document.createElement('div');
-      const metaEl   = document.createElement('div');
-
-      senderEl.className = 'ops-msg-sender';
-      bubbleEl.className = 'ops-bubble';
-      metaEl.className   = 'ops-msg-meta';
-
-      senderEl.textContent = isOps ? '[ROMI DESK]' : '[CLIENT]';
-
-      // v6.1: all messages (client + ops) are stored as Base64 — decode them
-      // isEncrypted flag removed: client messages are ops-readable in v6.1
-      try {
-        bubbleEl.textContent = decodeURIComponent(escape(atob(m.message_ciphertext || '')));
-      } catch(_) {
-        // fallback: show raw if atob fails (e.g. plain text system message)
-        bubbleEl.textContent = m.message_ciphertext || '';
-      }
-
-      metaEl.textContent = tStr;
-      div.appendChild(senderEl);
-      div.appendChild(bubbleEl);
-      div.appendChild(metaEl);
-      container.appendChild(div);
-      // Store timestamp - next poll uses strict gt so this message won't be re-fetched
-      _lastMsgTs = m.created_at;
-    });
-    container.scrollTop = container.scrollHeight;
-  } catch(e) {
-    const container = document.getElementById('opsChatMessages');
-    if (!_lastMsgTs) { container.textContent=''; const e2=document.createElement('div'); e2.className='empty-state'; e2.textContent='ERROR LOADING — RETRY'; container.appendChild(e2); }
-  }
-}
-
-async function opsSendMessage() {
-  if (!_activeChatId || !_opsToken) return;
-  const input = document.getElementById('opsMessageInput');
-  const msg   = input.value.trim();
-  if (!msg) return;
-  if (msg.length > 2000) { alert('MESSAGE TOO LONG — MAX 2000 CHARACTERS'); return; }
-  input.value = '';
-  try {
-    const res  = await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action:   'opsReply',
-        opsToken: _opsToken,
-        roomId:   _activeChatId,
-        message:  msg,
-        roomType: _activeChatType || 'support'
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      _lastMsgTs = null;
-      await loadOpsChatMessages();
-    } else if (data.error === 'OPS SESSION INVALID OR EXPIRED') {
-      forceLogout('SESSION EXPIRED — PLEASE LOG IN AGAIN');
-    }
-  } catch(e) {
-    console.error('opsSendMessage error:', e);
-    const container = document.getElementById('opsChatMessages');
-    const errDiv = document.createElement('div');
-    errDiv.className = 'empty-state';
-    errDiv.style.color = 'var(--danger)';
-    errDiv.textContent = 'SEND FAILED — RETRY';
-    container.appendChild(errDiv);
-  }
-}
-
-// ============================================================
-// OPS ACTIONS
-// ============================================================
-async function opsDD(email, decision) {
-  if (!confirm(`${decision === 'APPROVED' ? 'APPROVE' : 'REJECT'} DD application for ${email}?`)) return;
-  let reason = '';
-  if (decision === 'REJECTED') {
-    reason = prompt('Rejection reason (shown internally):') || 'Rejected by ops.';
-  }
-  try {
-    // F-10: State-mutating action must be POST; opsToken in Authorization header only
-    const action = decision === 'APPROVED' ? 'approveDDReview' : 'rejectDDReview';
-    const body   = { action, email, token: _opsToken };
-    if (reason) body.reason = reason;
-    const res    = await fetch(API_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_opsToken}` },
-      body:    JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.error) { alert(data.error); return; }
-    alert(`✓ DD ${decision} recorded for ${email}`);
-    setTimeout(loadOpsData, 1000);
-  } catch(e) { alert('NETWORK ERROR — RETRY'); }
-}
-
-async function opsApproveRoom(roomId, decision) {
-  if (!confirm(`${decision} trade room?`)) return;
-  try {
-    const res  = await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'approveRoom', opsToken: _opsToken, roomId, decision })
-    });
-    const data = await res.json();
-    if (data.success) loadOpsData();
-    else alert(data.error || 'ACTION FAILED');
-  } catch(e) { alert('NETWORK ERROR'); }
-}
-
-async function opsApproveCloseRoom(roomId) {
-  const id = roomId || _activeChatId;
-  if (!id) return;
-  if (!confirm('Close this trade room? All messages are retained for compliance.')) return;
-  try {
-    const res  = await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'closeRoom', opsToken: _opsToken, roomId: id })
-    });
-    const data = await res.json();
-    if (data.success) {
-      _activeChatId = null; _lastMsgTs = null;
-      if (_chatInterval) clearInterval(_chatInterval);
-      document.getElementById('opsChatMessages').textContent  = '';
-      const e = document.createElement('div'); e.className='empty-state'; e.textContent='Room closed — messages retained for compliance';
-      document.getElementById('opsChatMessages').appendChild(e);
-      document.getElementById('opsInputRow').style.display  = 'none';
-      document.getElementById('closeRoomBtn').style.display = 'none';
-      document.getElementById('roomInfoBar').style.display  = 'none';
-      document.getElementById('chatAreaTitle').textContent  = 'SELECT A CONVERSATION';
-      loadOpsData();
-    } else alert(data.error||'FAILED');
-  } catch(e) { alert('NETWORK ERROR'); }
-}
-
-function opsCloseRoom()   { opsApproveCloseRoom(); }
-
-async function opsCloseTicket() {
-  if (!_activeChatId) return;
-  if (!confirm('Close this support ticket? All messages are retained.')) return;
-  try {
-    const res  = await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'closeTicket', opsToken: _opsToken, ticketId: _activeChatId })
-    });
-    const data = await res.json();
-    if (data.success) {
-      _activeChatId = null; _lastMsgTs = null;
-      if (_chatInterval) clearInterval(_chatInterval);
-      document.getElementById('opsChatMessages').textContent    = '';
-      const e = document.createElement('div'); e.className='empty-state'; e.textContent='Ticket closed — messages retained for compliance';
-      document.getElementById('opsChatMessages').appendChild(e);
-      document.getElementById('opsInputRow').style.display    = 'none';
-      document.getElementById('closeTicketBtn').style.display = 'none';
-      document.getElementById('roomInfoBar').style.display    = 'none';
-      document.getElementById('chatAreaTitle').textContent    = 'SELECT A CONVERSATION';
-      loadOpsData();
-    } else alert(data.error || 'FAILED TO CLOSE TICKET');
-  } catch(e) { alert('NETWORK ERROR'); }
-}
-
-// ── Tab switches ──
-function switchOpsTab(tab, btn) {
-  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
-  ['dd','mandates','rooms'].forEach(t => {
-    const el = document.getElementById('opsTab-'+t);
-    if (el) el.style.display = 'none';
-  });
-  const pane = document.getElementById('opsTab-'+tab);
-  if (pane) pane.style.display = 'block';
-  btn.classList.add('active');
-}
-
-function switchChatView(view, btn) {
-  _chatView = view;
-  btn.closest('.ops-tab-bar').querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  if (_opsData) renderChatList(_opsData.tickets||[], _opsData.rooms||[]);
-}
-
-// Wire static buttons via addEventListener
 document.addEventListener('DOMContentLoaded', function() {
-  // Auth buttons
-  document.getElementById('passphraseBtn')?.addEventListener('click', requestOTP);
-  document.getElementById('otpBtn')?.addEventListener('click', verifyOpsOTP);
-  document.getElementById('passphraseInput')?.addEventListener('keydown', e => { if(e.key==='Enter') requestOTP(); });
-  document.getElementById('otpInput')?.addEventListener('keydown', e => { if(e.key==='Enter') verifyOpsOTP(); });
-  // F-07: otp numeric input guard
-  document.getElementById('otpInput')?.addEventListener('input', function() {
-    this.value = this.value.replace(/\D/g,'').slice(0,6);
-  });
-  document.querySelector('.modal-close')?.addEventListener('click', closeModal);
-  document.querySelector('.ops-logout-btn')?.addEventListener('click', opsLogout);
-  document.getElementById('backBtn')?.addEventListener('click', backToPassphrase);
-  // F-07: refresh + lead search
-  document.getElementById('refreshBtn')?.addEventListener('click', loadOpsData);
-  document.getElementById('leadSearch')?.addEventListener('input', function() { filterLeads(this.value); });
-  // F-07: DD/Mandates/Rooms tabs
-  document.getElementById('tabBtnDD')?.addEventListener('click', function() { switchOpsTab('dd', this); });
-  document.getElementById('tabBtnMandates')?.addEventListener('click', function() { switchOpsTab('mandates', this); });
-  document.getElementById('tabBtnRooms')?.addEventListener('click', function() { switchOpsTab('rooms', this); });
-  // F-07: Chat tabs
-  document.getElementById('chatTabBtnTickets')?.addEventListener('click', function() { switchChatView('tickets', this); });
-  document.getElementById('chatTabBtnRooms')?.addEventListener('click', function() { switchChatView('traderooms', this); });
-  // F-07: Approve/deny room buttons
-  document.getElementById('approveRoomBtn')?.addEventListener('click', () => opsApproveCurrent('APPROVE'));
-  document.getElementById('denyRoomBtn')?.addEventListener('click', () => opsApproveCurrent('DENY'));
-  // Message input + send
-  document.getElementById('opsMessageInput')?.addEventListener('keydown', e => {
-    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); opsSendMessage(); }
-  });
-  document.getElementById('opsSendBtn')?.addEventListener('click', opsSendMessage);
-  document.getElementById('closeTicketBtn')?.addEventListener('click', opsCloseTicket);
-  document.getElementById('closeRoomBtn')?.addEventListener('click', opsCloseRoom);
-  // F-12: Close reasoning modal
-  document.getElementById('closeReasoningBtn')?.addEventListener('click', closeReasoningModal);
-  // F-07: Event delegation for dynamically-rendered table buttons
+  // === ALL CLICK HANDLERS ===
   document.addEventListener('click', function(e) {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-action');
-    if (action === 'review')       { openDDModal(btn); }
-    if (action === 'ddbtn')        { handleDDBtn(btn); }
-    if (action === 'ddbtn-modal')  { handleDDBtn(btn); closeModal(); }
-    if (action === 'dlpdf')        { downloadDDReport(btn); }
-    if (action === 'roomapprove')  { handleRoomApproveBtn(btn); }
-    if (action === 'roomclose')    { handleRoomCloseBtn(btn); }
-    if (action === 'chatclick')    { handleChatItemClick(btn); }
-    if (action === 'audittrail') {
-      // F-12: fetch full reasoning from _opsData to avoid attribute truncation
-      const id = btn.getAttribute('data-id');
-      const ddItem = (_opsData?.ddQueue || []).find(d => d.id === id);
-      openReasoningModal(ddItem?.audit_reasoning || 'No audit trail available.');
+    // [data-action] buttons (mandate, room, modal, DD buttons)
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      const action = actionBtn.getAttribute('data-action');
+      const id = actionBtn.getAttribute('data-id');
+      const email = actionBtn.getAttribute('data-email');
+      const decision = actionBtn.getAttribute('data-decision');
+      const roomid = actionBtn.getAttribute('data-roomid');
+      const path = actionBtn.getAttribute('data-path');
+
+      if (action === 'review') openDDModal(actionBtn);
+      if (action === 'ddbtn' || action === 'ddbtn-modal') {
+        if (email && decision) opsDD(email, decision);
+        if (action === 'ddbtn-modal') closeModal();
+      }
+      if (action === 'dlpdf') downloadDDReport(actionBtn);
+      if (action === 'roomapprove' && roomid && decision) opsApproveRoom(roomid, decision);
+      if (action === 'roomclose' && roomid) opsApproveCloseRoom(roomid);
+      if (action === 'chatclick') {
+        const roomId = actionBtn.getAttribute('data-id');
+        const type = actionBtn.getAttribute('data-type');
+        const label = actionBtn.getAttribute('data-label');
+        if (roomId && type && label) openOpsChat(roomId, type, label);
+      }
+      if (action === 'audittrail') {
+        const item = (_opsData?.ddQueue || []).find(d => d.id === id);
+        openReasoningModal(item?.audit_reasoning || '');
+      }
+    }
+
+    // Specific ID buttons
+    if (e.target.id === 'passphraseBtn') requestOTP();
+    if (e.target.id === 'otpBtn') verifyOpsOTP();
+    if (e.target.id === 'backBtn') backToPassphrase();
+    if (e.target.classList.contains('modal-close')) closeModal();
+    if (e.target.id === 'closeReasoningBtn') closeReasoningModal();
+    if (e.target.classList.contains('ops-logout-btn')) opsLogout();
+    if (e.target.id === 'refreshBtn') loadOpsData();
+    if (e.target.id === 'approveRoomBtn') opsApproveCurrent('APPROVE');
+    if (e.target.id === 'denyRoomBtn') opsApproveCurrent('DENY');
+    if (e.target.id === 'opsSendBtn') opsSendMessage();
+    if (e.target.id === 'closeTicketBtn') opsCloseTicket();
+    if (e.target.id === 'closeRoomBtn') opsApproveCloseRoom();
+  });
+
+  // === ALL CHANGE HANDLERS ===
+  document.addEventListener('change', function(e) {
+    if (e.target.id === 'leadSearch') filterLeads(e.target.value);
+  });
+
+  // === TAB HANDLERS ===
+  document.addEventListener('click', function(e) {
+    const tabBtn = e.target.closest('.ops-tab');
+    if (!tabBtn) return;
+    if (tabBtn.id === 'chatTabSupport' || tabBtn.classList.contains('ops-tab')) {
+      const parent = tabBtn.closest('[id^="chat"]');
+      if (!parent) {
+        // Top-level tab bar (DD/Mandates/Rooms)
+        const bar = tabBtn.closest('.ops-tab-bar');
+        if (!bar) return;
+        if (tabBtn.textContent.includes('DD')) switchOpsTab('dd', tabBtn);
+        if (tabBtn.textContent.includes('MANDATES')) switchOpsTab('mandates', tabBtn);
+        if (tabBtn.textContent.includes('TRADE ROOMS')) switchOpsTab('rooms', tabBtn);
+      } else {
+        // Chat view tabs
+        if (tabBtn.textContent.includes('SUPPORT')) switchChatView('tickets', tabBtn);
+        if (tabBtn.textContent.includes('TRADE ROOMS')) switchChatView('traderooms', tabBtn);
+      }
+    }
+  });
+
+  // === ENTER KEY HANDLERS ===
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      if (e.target.id === 'passphraseInput') requestOTP();
+      if (e.target.id === 'otpInput') verifyOpsOTP();
+      if (e.target.id === 'opsMessageInput' && !e.shiftKey) {
+        e.preventDefault();
+        opsSendMessage();
+      }
+    }
+  });
+
+  // === OTP NUMERIC INPUT GUARD ===
+  document.addEventListener('input', function(e) {
+    if (e.target.id === 'otpInput') {
+      const cleaned = e.target.value.replace(/\D/g,'').slice(0,6);
+      if (e.target.value !== cleaned) e.target.value = cleaned;
     }
   });
 });
