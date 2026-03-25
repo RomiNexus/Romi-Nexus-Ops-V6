@@ -4,7 +4,8 @@ const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
 // ── DOMPurify safeHTML helpers ──
 const PURIFY_CONFIG = {
   ALLOWED_TAGS: ['b','strong','br','div','span','table','thead','tbody','tr','th','td','button','a','select','option'],
-  ALLOWED_ATTR: ['style','class','id','colspan','onclick','data-id','data-email','data-decision','data-roomid','href','target','rel'],
+  // F-07: 'onclick' removed — all dynamic buttons now use data-action + event delegation
+  ALLOWED_ATTR: ['style','class','id','colspan','data-id','data-email','data-decision','data-roomid','data-action','data-path','data-active','data-label','href','target','rel'],
   FORCE_BODY: true,
 };
 function safeHTML(html) {
@@ -96,7 +97,10 @@ window.onload = function() {
 
 async function verifySessionThenShow() {
   try {
-    const res  = await fetch(`${API_URL}?action=getOpsData&opsToken=${encodeURIComponent(_opsToken)}`);
+    // F-10: opsToken moved to Authorization header — never exposed in URL/logs
+    const res  = await fetch(`${API_URL}?action=getOpsData`, {
+      headers: { 'Authorization': `Bearer ${_opsToken}` },
+    });
     const data = await res.json();
     if (data.error) {
       try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
@@ -233,7 +237,10 @@ function opsLogout() {
 async function loadOpsData() {
   if (!_opsToken) return;
   try {
-    const res  = await fetch(`${API_URL}?action=getOpsData&opsToken=${encodeURIComponent(_opsToken)}`);
+    // F-10: opsToken in Authorization header only
+    const res  = await fetch(`${API_URL}?action=getOpsData`, {
+      headers: { 'Authorization': `Bearer ${_opsToken}` },
+    });
     const data = await res.json();
     if (data.error === 'OPS SESSION INVALID OR EXPIRED') {
       forceLogout('SESSION EXPIRED — PLEASE LOG IN AGAIN'); return;
@@ -360,11 +367,11 @@ function renderDD(queue) {
       <td>${verdictHtml}</td>
       <td style="font-size:8px;color:var(--text-dim);">${timeAgo(item.created_at)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap;">
-        <button class="action-btn" data-id="${sanitize(item.id)}" onclick="openDDModal(this)">REVIEW</button>
+        <button class="action-btn" data-id="${sanitize(item.id)}" data-action="review">REVIEW</button>
         ${item.status === 'COMPLETED' && !item.human_reviewed ? `
-        <button class="action-btn approve" data-email="${sanitize(item.applicant_email)}" data-decision="APPROVED" onclick="handleDDBtn(this)">✓ APPROVE</button>
-        <button class="action-btn deny"    data-email="${sanitize(item.applicant_email)}" data-decision="REJECTED" onclick="handleDDBtn(this)">✗ REJECT</button>` : ''}
-        ${item.report_pdf_path ? `<a href="${sanitize(`${API_URL}?action=getDDReport&opsToken=${encodeURIComponent(_opsToken)}&path=${encodeURIComponent(item.report_pdf_path)}`)}" target="_blank" rel="noopener noreferrer" style="font-size:8px;color:var(--gold);text-decoration:none;border:1px solid rgba(212,175,55,0.3);padding:3px 6px;letter-spacing:1px;">PDF</a>` : ''}
+        <button class="action-btn approve" data-email="${sanitize(item.applicant_email)}" data-decision="APPROVED" data-action="ddbtn">✓ APPROVE</button>
+        <button class="action-btn deny"    data-email="${sanitize(item.applicant_email)}" data-decision="REJECTED" data-action="ddbtn">✗ REJECT</button>` : ''}
+        ${item.report_pdf_path ? `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="font-size:8px;">PDF</button>` : ''}
       </div></td>
     </tr>`;
   }).join(''));
@@ -458,15 +465,15 @@ function openDDModal(btn) {
   let actHtml = '';
   if (item.status === 'COMPLETED' && !item.human_reviewed) {
     actHtml = `
-      <button class="action-btn approve" style="padding:8px 16px;font-size:10px;" data-email="${sanitize(item.applicant_email)}" data-decision="APPROVED" onclick="handleDDBtn(this);closeModal()">✓ APPROVE & CREATE USER</button>
-      <button class="action-btn deny"    style="padding:8px 16px;font-size:10px;" data-email="${sanitize(item.applicant_email)}" data-decision="REJECTED" onclick="handleDDBtn(this);closeModal()">✗ REJECT APPLICATION</button>`;
+      <button class="action-btn approve" style="padding:8px 16px;font-size:10px;" data-email="${sanitize(item.applicant_email)}" data-decision="APPROVED" data-action="ddbtn-modal">✓ APPROVE & CREATE USER</button>
+      <button class="action-btn deny"    style="padding:8px 16px;font-size:10px;" data-email="${sanitize(item.applicant_email)}" data-decision="REJECTED" data-action="ddbtn-modal">✗ REJECT APPLICATION</button>`;
   } else if (item.human_reviewed) {
     actHtml = `<span style="font-size:9px;color:var(--text-muted);">✓ HUMAN REVIEWED — DECISION RECORDED</span>`;
   } else {
     actHtml = `<span style="font-size:9px;color:var(--text-muted);">DD PROCESSING IN PROGRESS — AWAITING AI REPORT</span>`;
   }
   if (item.report_pdf_path) {
-    actHtml += `<a href="${sanitize(`${API_URL}?action=getDDReport&opsToken=${encodeURIComponent(_opsToken)}&path=${encodeURIComponent(item.report_pdf_path)}`)}" target="_blank" rel="noopener noreferrer" class="action-btn" style="padding:8px 16px;font-size:10px;text-decoration:none;display:inline-block;">📄 DOWNLOAD PDF REPORT</a>`;
+    actHtml += `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="padding:8px 16px;font-size:10px;">📄 DOWNLOAD PDF REPORT</button>`;
   }
   setHTML(document.getElementById('modalActions'), actHtml);
 
@@ -475,6 +482,34 @@ function openDDModal(btn) {
 
 function closeModal() {
   document.getElementById('ddModal').classList.remove('open');
+}
+
+// F-10: PDF download — token in Authorization header only, never in URL
+async function downloadDDReport(btn) {
+  const path = btn.getAttribute('data-path');
+  if (!path || !_opsToken) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const res = await fetch(
+      `${API_URL}?action=getDDReport&path=${encodeURIComponent(path)}`,
+      { headers: { 'Authorization': `Bearer ${_opsToken}` } }
+    );
+    if (!res.ok) { alert('PDF NOT AVAILABLE'); btn.disabled = false; btn.textContent = 'PDF'; return; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `DD_Report_${path.split('/').pop() || 'report'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('DOWNLOAD ERROR — RETRY');
+  }
+  btn.disabled = false;
+  btn.textContent = 'PDF';
 }
 document.getElementById('ddModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
@@ -511,11 +546,11 @@ function renderRoomsTable(rooms) {
       <td style="font-size:8px;color:var(--text-dim);">${timeAgo(r.created_at)}</td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap;">
         ${isPending
-          ? `<button class="action-btn approve" data-roomid="${safeId}" data-decision="APPROVE" onclick="handleRoomApproveBtn(this)">✓ APPROVE</button>
-             <button class="action-btn deny"    data-roomid="${safeId}" data-decision="DENY"    onclick="handleRoomApproveBtn(this)">✗ DENY</button>`
+          ? `<button class="action-btn approve" data-roomid="${safeId}" data-decision="APPROVE" data-action="roomapprove">✓ APPROVE</button>
+             <button class="action-btn deny"    data-roomid="${safeId}" data-decision="DENY"    data-action="roomapprove">✗ DENY</button>`
           : ''}
         ${r.status === 'ACTIVE'
-          ? `<button class="action-btn close-room" data-roomid="${safeId}" onclick="handleRoomCloseBtn(this)">CLOSE</button>`
+          ? `<button class="action-btn close-room" data-roomid="${safeId}" data-action="roomclose">CLOSE</button>`
           : ''}
       </div></td>
     </tr>`;
@@ -537,7 +572,7 @@ function renderDeals(deals) {
   const tbody = document.getElementById('dealsTbody');
   if (!deals.length) { setHTML(tbody, '<tr><td colspan="5" class="empty-state">NO DEALS REPORTED</td></tr>'); return; }
   setHTML(tbody, deals.map(d => {
-    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.01).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+    const comm = d.value_usd ? (parseFloat(d.value_usd) * 0.02).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'; // F-08: 2.0% per FCCO §8
     return `<tr>
       <td style="font-size:9px;color:var(--gold);">${sanitize(d.commodity||'')}</td>
       <td style="font-size:9px;">${sanitize(String(d.quantity_mt||''))} MT</td>
@@ -558,7 +593,7 @@ function renderChatList(tickets, rooms) {
     setHTML(panel, tickets.map(t =>
       `<div class="chat-list-item${_activeChatId===t.id?' active':''}"
         data-id="${sanitize(t.id)}" data-type="support" data-label="${sanitize(t.subject||'Support')}"
-        onclick="handleChatItemClick(this)">
+        data-action="chatclick">
         <div class="cli-name">${sanitize(t.subject||'Support Ticket')}</div>
         <div class="cli-sub">${sanitize(t.status||'')} · ${timeAgo(t.updated_at)}</div>
       </div>`
@@ -571,7 +606,7 @@ function renderChatList(tickets, rooms) {
     setHTML(panel, activeRooms.map(r =>
       `<div class="chat-list-item${_activeChatId===r.id?' active':''}"
         data-id="${sanitize(r.id)}" data-type="trade" data-label="${sanitize(r.room_name||r.commodity||r.id)}"
-        onclick="handleChatItemClick(this)">
+        data-action="chatclick">
         <div class="cli-name">${sanitize(r.room_name||r.commodity||'Trade Room')}</div>
         <div class="cli-sub">${sanitize(r.status||'')} · ${timeAgo(r.updated_at)}</div>
       </div>`
@@ -644,9 +679,8 @@ async function opsApproveCurrent(decision) {
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
-    // Use getOpsMessages action (ops-authenticated, no membership check)
-    // Falls back to getMessages with opsToken in Authorization header
-    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}&opsToken=${encodeURIComponent(_opsToken)}`;
+    // F-10: opsToken only in Authorization header — removed from URL query string
+    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
     if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
 
     const res  = await fetch(url, { headers: { 'Authorization': `Bearer ${_opsToken}` } });
@@ -749,10 +783,15 @@ async function opsDD(email, decision) {
     reason = prompt('Rejection reason (shown internally):') || 'Rejected by ops.';
   }
   try {
+    // F-10: State-mutating action must be POST; opsToken in Authorization header only
     const action = decision === 'APPROVED' ? 'approveDDReview' : 'rejectDDReview';
-    const res    = await fetch(
-      `${API_URL}?action=${action}&opsToken=${encodeURIComponent(_opsToken)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(_opsToken)}${reason ? '&reason='+encodeURIComponent(reason) : ''}`
-    );
+    const body   = { action, email, token: _opsToken };
+    if (reason) body.reason = reason;
+    const res    = await fetch(API_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_opsToken}` },
+      body:    JSON.stringify(body),
+    });
     const data = await res.json();
     if (data.error) { alert(data.error); return; }
     alert(`✓ DD ${decision} recorded for ${email}`);
@@ -845,17 +884,68 @@ function switchChatView(view, btn) {
 
 // Wire static buttons via addEventListener
 document.addEventListener('DOMContentLoaded', function() {
+  // Auth buttons
   document.getElementById('passphraseBtn')?.addEventListener('click', requestOTP);
   document.getElementById('otpBtn')?.addEventListener('click', verifyOpsOTP);
   document.getElementById('passphraseInput')?.addEventListener('keydown', e => { if(e.key==='Enter') requestOTP(); });
   document.getElementById('otpInput')?.addEventListener('keydown', e => { if(e.key==='Enter') verifyOpsOTP(); });
+  // F-07: otp numeric input guard (was inline oninput)
+  document.getElementById('otpInput')?.addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g,'').slice(0,6);
+  });
   document.querySelector('.modal-close')?.addEventListener('click', closeModal);
   document.querySelector('.ops-logout-btn')?.addEventListener('click', opsLogout);
+  // F-07: back button (was inline onclick with full DOM manipulation)
+  document.getElementById('backBtn')?.addEventListener('click', backToPassphrase);
+  // F-07: refresh button
+  document.getElementById('refreshBtn')?.addEventListener('click', loadOpsData);
+  // F-07: lead search
+  document.getElementById('leadSearch')?.addEventListener('input', function() { filterLeads(this.value); });
+  // F-07: DD/Mandates/Rooms tabs
+  document.getElementById('tabBtnDD')?.addEventListener('click', function() { switchOpsTab('dd', this); });
+  document.getElementById('tabBtnMandates')?.addEventListener('click', function() { switchOpsTab('mandates', this); });
+  document.getElementById('tabBtnRooms')?.addEventListener('click', function() { switchOpsTab('rooms', this); });
+  // F-07: Chat tabs
+  document.getElementById('chatTabBtnTickets')?.addEventListener('click', function() { switchChatView('tickets', this); });
+  document.getElementById('chatTabBtnRooms')?.addEventListener('click', function() { switchChatView('traderooms', this); });
+  // F-07: Approve/deny room buttons
+  document.getElementById('approveRoomBtn')?.addEventListener('click', () => opsApproveCurrent('APPROVE'));
+  document.getElementById('denyRoomBtn')?.addEventListener('click', () => opsApproveCurrent('DENY'));
+  // Message input and send
   document.getElementById('opsMessageInput')?.addEventListener('keydown', e => {
     if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); opsSendMessage(); }
   });
-  document.querySelector('.ops-send')?.addEventListener('click', opsSendMessage);
+  document.getElementById('opsSendBtn')?.addEventListener('click', opsSendMessage);
   document.getElementById('closeTicketBtn')?.addEventListener('click', opsCloseTicket);
   document.getElementById('closeRoomBtn')?.addEventListener('click', opsCloseRoom);
-  document.getElementById('backBtn')?.addEventListener('click', backToPassphrase);
+  // F-07: Event delegation for dynamically-rendered table buttons
+  // Replaces all inline onclick in setHTML() template literals
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-action');
+
+    if (action === 'review') {
+      openDDModal(btn);
+    }
+    if (action === 'ddbtn') {
+      handleDDBtn(btn);
+    }
+    if (action === 'ddbtn-modal') {
+      handleDDBtn(btn);
+      closeModal();
+    }
+    if (action === 'dlpdf') {
+      downloadDDReport(btn);
+    }
+    if (action === 'roomapprove') {
+      handleRoomApproveBtn(btn);
+    }
+    if (action === 'roomclose') {
+      handleRoomCloseBtn(btn);
+    }
+    if (action === 'chatclick') {
+      handleChatItemClick(btn);
+    }
+  });
 });
