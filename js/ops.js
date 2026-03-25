@@ -999,26 +999,24 @@ document.addEventListener('click', function(e) {
     if (e.target.id === 'leadSearch') filterLeads(e.target.value);
   });
 
-  // === TAB HANDLERS ===
-  document.addEventListener('click', function(e) {
-    const tabBtn = e.target.closest('.ops-tab');
-    if (!tabBtn) return;
-    if (tabBtn.id === 'chatTabSupport' || tabBtn.classList.contains('ops-tab')) {
-      const parent = tabBtn.closest('[id^="chat"]');
-      if (!parent) {
-        // Top-level tab bar (DD/Mandates/Rooms)
-        const bar = tabBtn.closest('.ops-tab-bar');
-        if (!bar) return;
-        if (tabBtn.textContent.includes('DD')) switchOpsTab('dd', tabBtn);
-        if (tabBtn.textContent.includes('MANDATES')) switchOpsTab('mandates', tabBtn);
-        if (tabBtn.textContent.includes('TRADE ROOMS')) switchOpsTab('rooms', tabBtn);
-      } else {
-        // Chat view tabs
-        if (tabBtn.textContent.includes('SUPPORT')) switchChatView('tickets', tabBtn);
-        if (tabBtn.textContent.includes('TRADE ROOMS')) switchChatView('traderooms', tabBtn);
-      }
-    }
-  });
+// === TAB HANDLERS ===
+document.addEventListener('click', function(e) {
+  const tabBtn = e.target.closest('.ops-tab');
+  if (!tabBtn) return;
+  
+  // Check for data-tab attribute (main tabs: DD, Mandates, Rooms)
+  const tabName = tabBtn.getAttribute('data-tab');
+  if (tabName) {
+    switchOpsTab(tabName, tabBtn);
+    return;
+  }
+  
+  // Check for data-chat-view attribute (chat tabs: tickets, traderooms)
+  const chatView = tabBtn.getAttribute('data-chat-view');
+  if (chatView) {
+    switchChatView(chatView, tabBtn);
+    return;
+  }
 });
 
 // === ENTER KEY HANDLERS ===
