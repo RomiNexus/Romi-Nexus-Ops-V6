@@ -1,7 +1,11 @@
 'use strict';
 // ============================================================
-// ROMI NEXUS — OPS COMMAND CENTER v6.1-sec (FIXED)
-// Event Delegation + Auth Flow Separation
+// ROMI NEXUS — OPS COMMAND CENTER v6.1-sec (FIXED v3.7)
+// Fixes:
+// - Bug 14: GET ops actions now pass opsToken as URL query param
+//           (worker reads from params not Authorization header)
+// - Bug 13: opsDD() now sends { opsToken, email, token } — opsToken
+//           field was missing, causing "MISSING REQUIRED FIELD: opsToken"
 // ============================================================
 
 const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
@@ -97,12 +101,10 @@ function initializeAuth() {
     }
   } catch(_) {}
   try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
-  // Show auth overlay on initial load
   const authOverlay = document.getElementById('authOverlay');
   if (authOverlay) authOverlay.style.display = 'flex';
 }
 
-// Run on both DOMContentLoaded and load events to ensure it runs
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initializeAuth);
 } else {
@@ -112,13 +114,14 @@ window.addEventListener('load', initializeAuth);
 
 async function verifySessionThenShow() {
   try {
-    const res  = await fetch(`${API_URL}?action=getOpsData`, {
-      headers: { 'Authorization': `Bearer ${_opsToken}` },
-    });
+    // Bug 14 fix: include opsToken as URL query param (not just Authorization header)
+    const res  = await fetch(`${API_URL}?action=getOpsData&opsToken=${encodeURIComponent(_opsToken)}`);
     const data = await res.json();
     if (data.error) {
       try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
       _opsToken = '';
+      const authOverlay = document.getElementById('authOverlay');
+      if (authOverlay) authOverlay.style.display = 'flex';
       return;
     }
     _opsData = data;
@@ -127,6 +130,8 @@ async function verifySessionThenShow() {
   } catch(e) {
     try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
     _opsToken = '';
+    const authOverlay = document.getElementById('authOverlay');
+    if (authOverlay) authOverlay.style.display = 'flex';
   }
 }
 
@@ -139,16 +144,15 @@ async function requestOTP() {
   const val = (pp.value || '').trim();
   const btn = document.getElementById('passphraseBtn');
   const err = document.getElementById('authError1');
-  
-  if (!val || val.length < 8 || val.length > 128) { 
-    showAuthError(err, 'ENTER VALID PASSPHRASE'); 
-    return; 
+
+  if (!val || val.length < 8 || val.length > 128) {
+    showAuthError(err, 'ENTER VALID PASSPHRASE'); return;
   }
-  
+
   if(btn) btn.disabled = true;
   if(btn) btn.textContent = 'SENDING CODE...';
   if(err) err.style.display = 'none';
-  
+
   try {
     const res  = await fetch(API_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -176,26 +180,23 @@ async function requestOTP() {
 async function verifyOpsOTP() {
   const otpInput = document.getElementById('otpInput');
   if(!otpInput) return;
-  
+
   const otp = (otpInput.value || '').trim();
   const pp  = document.getElementById('_pp').value;
   const btn = document.getElementById('otpBtn');
   const err = document.getElementById('authError2');
-  
-  if (!otp || !/^\d{6}$/.test(otp)) { 
-    showAuthError(err, 'ENTER 6-DIGIT CODE'); 
-    return; 
+
+  if (!otp || !/^\d{6}$/.test(otp)) {
+    showAuthError(err, 'ENTER 6-DIGIT CODE'); return;
   }
-  if (!pp) { 
-    showAuthError(err, 'SESSION LOST — START AGAIN'); 
-    backToPassphrase(); 
-    return; 
+  if (!pp) {
+    showAuthError(err, 'SESSION LOST — START AGAIN'); backToPassphrase(); return;
   }
-  
+
   if(btn) btn.disabled = true;
   if(btn) btn.textContent = 'VERIFYING...';
   if(err) err.style.display = 'none';
-  
+
   try {
     const res  = await fetch(API_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -234,7 +235,7 @@ function backToPassphrase() {
   const otpInput = document.getElementById('otpInput');
   if(otpInput) otpInput.value = '';
   const ppInput = document.getElementById('_pp');
-  if(ppInput) ppInput.value      = '';
+  if(ppInput) ppInput.value = '';
 }
 
 function showAuthError(el, msg) {
@@ -259,28 +260,28 @@ function forceLogout(reason) {
   clearTimeout(_idleTimer);
   _opsToken = ''; _opsData = null; _loadFailCount = 0;
   try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
-  
+
   const opsView = document.getElementById('opsView');
   const authOverlay = document.getElementById('authOverlay');
   if(opsView) opsView.style.display   = 'none';
   if(authOverlay) authOverlay.style.display  = 'flex';
-  
+
   const step1 = document.getElementById('authStep1');
   const step2 = document.getElementById('authStep2');
   if(step1) step1.style.display = 'block';
   if(step2) step2.style.display = 'none';
-  
+
   const passphraseInput = document.getElementById('passphraseInput');
   const otpInput = document.getElementById('otpInput');
   const ppInput = document.getElementById('_pp');
   if(passphraseInput) passphraseInput.value   = '';
   if(otpInput) otpInput.value          = '';
   if(ppInput) ppInput.value               = '';
-  
+
   const passphraseBtn = document.getElementById('passphraseBtn');
   if(passphraseBtn) passphraseBtn.disabled  = false;
   if(passphraseBtn) passphraseBtn.textContent = 'REQUEST ACCESS CODE →';
-  
+
   if (reason) {
     const err = document.getElementById('authError1');
     if(err) err.textContent    = reason;
@@ -299,9 +300,8 @@ function opsLogout() {
 async function loadOpsData() {
   if (!_opsToken) return;
   try {
-    const res  = await fetch(`${API_URL}?action=getOpsData`, {
-      headers: { 'Authorization': `Bearer ${_opsToken}` },
-    });
+    // Bug 14 fix: pass opsToken as URL query param so worker can read it
+    const res  = await fetch(`${API_URL}?action=getOpsData&opsToken=${encodeURIComponent(_opsToken)}`);
     const data = await res.json();
     if (data.error === 'OPS SESSION INVALID OR EXPIRED') {
       forceLogout('SESSION EXPIRED — PLEASE LOG IN AGAIN'); return;
@@ -528,7 +528,7 @@ function renderChatList(tickets, rooms) {
 }
 
 // ============================================================
-// OPS ACTIONS (✓ FIXED: These handlers receive proper delegation)
+// OPS ACTIONS
 // ============================================================
 async function opsDD(email, decision) {
   if (!confirm(`${decision === 'APPROVED' ? 'APPROVE' : 'REJECT'} DD application for ${email}?`)) return;
@@ -538,11 +538,18 @@ async function opsDD(email, decision) {
   }
   try {
     const action = decision === 'APPROVED' ? 'approveDDReview' : 'rejectDDReview';
-    const body   = { action, email, token: _opsToken };
+    // Bug 13 fix: send opsToken as field (not just Authorization header)
+    // Schema requires: opsToken, email, token — all three must be present
+    const body = {
+      action,
+      opsToken: _opsToken,   // Bug 13 fix: was missing, caused "MISSING REQUIRED FIELD: opsToken"
+      email,
+      token:    _opsToken,   // approval token field — not validated against stored data currently
+    };
     if (reason) body.reason = reason;
-    const res    = await fetch(API_URL, {
+    const res = await fetch(API_URL, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_opsToken}` },
+      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     });
     const data = await res.json();
@@ -659,15 +666,15 @@ async function openOpsChat(roomId, type, label) {
   const titleEl = document.getElementById('chatAreaTitle');
   if(labelEl) labelEl.textContent = sanitize(label);
   if(titleEl) titleEl.textContent   = sanitize(label);
-  
+
   const inputRow = document.getElementById('opsInputRow');
   const closeRoomBtn = document.getElementById('closeRoomBtn');
   const closeTicketBtn = document.getElementById('closeTicketBtn');
-  
+
   if(inputRow) inputRow.style.display    = 'flex';
   if(closeRoomBtn) closeRoomBtn.style.display   = type === 'trade'   ? 'inline-block' : 'none';
   if(closeTicketBtn) closeTicketBtn.style.display = type === 'support' ? 'inline-block' : 'none';
-  
+
   const msgContainer = document.getElementById('opsChatMessages');
   if(msgContainer) msgContainer.innerHTML = '';
   const emptyDiv = document.createElement('div');
@@ -718,10 +725,11 @@ async function opsApproveCurrent(decision) {
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
+    // Bug 14: getMessages doesn't require opsToken (optional field), so no URL param needed here
     let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
     if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
 
-    const res  = await fetch(url, { headers: { 'Authorization': `Bearer ${_opsToken}` } });
+    const res  = await fetch(url);
     const data = await res.json();
     const container = document.getElementById('opsChatMessages');
 
@@ -807,7 +815,7 @@ async function opsSendMessage() {
 }
 
 // ============================================================
-// DD MODAL (✓ FIXED: Proper DOM construction, no innerHTML)
+// DD MODAL
 // ============================================================
 function openDDModal(btn) {
   const id   = btn.getAttribute('data-id');
@@ -846,7 +854,6 @@ function openDDModal(btn) {
     html += `<div class="modal-section">
       <div class="modal-section-title" style="color:var(--warning);">⚠ MISSING DOCUMENTS (${missingDocs.length})</div>
       <div style="padding:8px 0;">${missingDocs.map(d => `<span class="missing-doc-tag">${sanitize(d)}</span>`).join('')}</div>
-      <div style="font-size:8px;color:var(--text-dim);margin-top:4px;">Initiate Trade button remains locked until these are submitted and verified.</div>
     </div>`;
   }
 
@@ -862,6 +869,7 @@ function openDDModal(btn) {
     </div>`;
   }
 
+  // Bug 17 fix: pillars now use pillar1-pillar6 keys from fixed Python worker
   const pillars = [
     ['PILLAR 1 — LEGAL & REGULATORY',      'pillar1'],
     ['PILLAR 2 — FINANCIAL HEALTH',         'pillar2'],
@@ -875,7 +883,7 @@ function openDDModal(btn) {
     html += `<div class="modal-section"><div class="modal-section-title">6-PILLAR ASSESSMENT</div>`;
     pillars.forEach(([label, key]) => {
       if (pillarScores[key]) {
-        const isFlag = pillarScores[key].includes('⚠') || pillarScores[key].toUpperCase().includes('HIT');
+        const isFlag = pillarScores[key].includes('⚠') || pillarScores[key].toUpperCase().includes('HIT') || pillarScores[key].toUpperCase().includes('CRITICAL');
         html += `<div class="pillar-block">
           <div class="pillar-label">${label}</div>
           <div class="pillar-text" style="${isFlag ? 'color:var(--warning)' : ''}">${sanitize(pillarScores[key])}</div>
@@ -887,7 +895,6 @@ function openDDModal(btn) {
 
   setHTML(document.getElementById('modalBody'), html);
 
-  // Action buttons
   let actHtml = '';
   if (item.status === 'COMPLETED' && !item.human_reviewed) {
     actHtml = `
@@ -920,8 +927,10 @@ async function downloadDDReport(btn) {
   if (!path || !_opsToken) return;
   btn.disabled = true; btn.textContent = '...';
   try {
-    const res = await fetch(`${API_URL}?action=getDDReport&path=${encodeURIComponent(path)}`,
-      { headers: { 'Authorization': `Bearer ${_opsToken}` } });
+    // Bug 14 fix: include opsToken in URL
+    const res = await fetch(
+      `${API_URL}?action=getDDReport&path=${encodeURIComponent(path)}&opsToken=${encodeURIComponent(_opsToken)}`
+    );
     if (!res.ok) { alert('PDF NOT AVAILABLE'); return; }
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
@@ -945,81 +954,65 @@ function closeReasoningModal() {
 }
 
 // ============================================================
-// UNIVERSAL EVENT DELEGATION (✓ CRITICAL FIX)
+// UNIVERSAL EVENT DELEGATION
 // ============================================================
-// === ALL CLICK HANDLERS ===
 document.addEventListener('click', function(e) {
-    // [data-action] buttons (mandate, room, modal, DD buttons)
-    const actionBtn = e.target.closest('[data-action]');
-    if (actionBtn) {
-      const action = actionBtn.getAttribute('data-action');
-      const id = actionBtn.getAttribute('data-id');
-      const email = actionBtn.getAttribute('data-email');
-      const decision = actionBtn.getAttribute('data-decision');
-      const roomid = actionBtn.getAttribute('data-roomid');
-      const path = actionBtn.getAttribute('data-path');
+  const actionBtn = e.target.closest('[data-action]');
+  if (actionBtn) {
+    const action   = actionBtn.getAttribute('data-action');
+    const id       = actionBtn.getAttribute('data-id');
+    const email    = actionBtn.getAttribute('data-email');
+    const decision = actionBtn.getAttribute('data-decision');
+    const roomid   = actionBtn.getAttribute('data-roomid');
+    const path     = actionBtn.getAttribute('data-path');
 
-      if (action === 'review') openDDModal(actionBtn);
-      if (action === 'ddbtn' || action === 'ddbtn-modal') {
-        if (email && decision) opsDD(email, decision);
-        if (action === 'ddbtn-modal') closeModal();
-      }
-      if (action === 'dlpdf') downloadDDReport(actionBtn);
-      if (action === 'roomapprove' && roomid && decision) opsApproveRoom(roomid, decision);
-      if (action === 'roomclose' && roomid) opsApproveCloseRoom(roomid);
-      if (action === 'chatclick') {
-        const roomId = actionBtn.getAttribute('data-id');
-        const type = actionBtn.getAttribute('data-type');
-        const label = actionBtn.getAttribute('data-label');
-        if (roomId && type && label) openOpsChat(roomId, type, label);
-      }
-      if (action === 'audittrail') {
-        const item = (_opsData?.ddQueue || []).find(d => d.id === id);
-        openReasoningModal(item?.audit_reasoning || '');
-      }
+    if (action === 'review') openDDModal(actionBtn);
+    if (action === 'ddbtn' || action === 'ddbtn-modal') {
+      if (email && decision) opsDD(email, decision);
+      if (action === 'ddbtn-modal') closeModal();
     }
+    if (action === 'dlpdf') downloadDDReport(actionBtn);
+    if (action === 'roomapprove' && roomid && decision) opsApproveRoom(roomid, decision);
+    if (action === 'roomclose' && roomid) opsApproveCloseRoom(roomid);
+    if (action === 'chatclick') {
+      const roomId = actionBtn.getAttribute('data-id');
+      const type   = actionBtn.getAttribute('data-type');
+      const label  = actionBtn.getAttribute('data-label');
+      if (roomId && type && label) openOpsChat(roomId, type, label);
+    }
+    if (action === 'audittrail') {
+      const item = (_opsData?.ddQueue || []).find(d => d.id === id);
+      openReasoningModal(item?.audit_reasoning || '');
+    }
+  }
 
-    // Specific ID buttons
-    if (e.target.id === 'passphraseBtn') requestOTP();
-    if (e.target.id === 'otpBtn') verifyOpsOTP();
-    if (e.target.id === 'backBtn') backToPassphrase();
-    if (e.target.classList.contains('modal-close')) closeModal();
-    if (e.target.id === 'closeReasoningBtn') closeReasoningModal();
-    if (e.target.classList.contains('ops-logout-btn')) opsLogout();
-    if (e.target.id === 'refreshBtn') loadOpsData();
-    if (e.target.id === 'approveRoomBtn') opsApproveCurrent('APPROVE');
-    if (e.target.id === 'denyRoomBtn') opsApproveCurrent('DENY');
-    if (e.target.id === 'opsSendBtn') opsSendMessage();
-    if (e.target.id === 'closeTicketBtn') opsCloseTicket();
-    if (e.target.id === 'closeRoomBtn') opsApproveCloseRoom();
-  });
+  if (e.target.id === 'passphraseBtn') requestOTP();
+  if (e.target.id === 'otpBtn') verifyOpsOTP();
+  if (e.target.id === 'backBtn') backToPassphrase();
+  if (e.target.classList.contains('modal-close')) closeModal();
+  if (e.target.id === 'closeReasoningBtn') closeReasoningModal();
+  if (e.target.classList.contains('ops-logout-btn')) opsLogout();
+  if (e.target.id === 'refreshBtn') loadOpsData();
+  if (e.target.id === 'approveRoomBtn') opsApproveCurrent('APPROVE');
+  if (e.target.id === 'denyRoomBtn') opsApproveCurrent('DENY');
+  if (e.target.id === 'opsSendBtn') opsSendMessage();
+  if (e.target.id === 'closeTicketBtn') opsCloseTicket();
+  if (e.target.id === 'closeRoomBtn') opsApproveCloseRoom();
+});
 
-  // === ALL CHANGE HANDLERS ===
-  document.addEventListener('change', function(e) {
-    if (e.target.id === 'leadSearch') filterLeads(e.target.value);
-  });
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'leadSearch') filterLeads(e.target.value);
+});
 
-// === TAB HANDLERS ===
 document.addEventListener('click', function(e) {
   const tabBtn = e.target.closest('.ops-tab');
   if (!tabBtn) return;
-  
-  // Check for data-tab attribute (main tabs: DD, Mandates, Rooms)
-  const tabName = tabBtn.getAttribute('data-tab');
-  if (tabName) {
-    switchOpsTab(tabName, tabBtn);
-    return;
-  }
-  
-  // Check for data-chat-view attribute (chat tabs: tickets, traderooms)
+  const tabName  = tabBtn.getAttribute('data-tab');
+  if (tabName) { switchOpsTab(tabName, tabBtn); return; }
   const chatView = tabBtn.getAttribute('data-chat-view');
-  if (chatView) {
-    switchChatView(chatView, tabBtn);
-    return;
-  }
+  if (chatView) { switchChatView(chatView, tabBtn); return; }
 });
 
-// === ENTER KEY HANDLERS ===
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     if (e.target.id === 'passphraseInput') requestOTP();
@@ -1031,7 +1024,6 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// === OTP NUMERIC INPUT GUARD ===
 document.addEventListener('input', function(e) {
   if (e.target.id === 'otpInput') {
     const cleaned = e.target.value.replace(/\D/g,'').slice(0,6);
