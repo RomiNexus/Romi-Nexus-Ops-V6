@@ -152,7 +152,7 @@
     .ops-msg-sender{font-size:8px;color:var(--text-muted);margin-bottom:2px;}
 
     .ops-input-row{display:flex;border-top:1px solid var(--border);}
-    .ops-input{flex:1;background:#000;border:none;outline:none;color:var(--text);font-family:var(--mono);font-size:11px;padding:9px 12px;resize:none;height:38px;}
+    .ops-input{flex:1;background:#000;border:none;outline:none;color:var(--text);font-family:var(--mono);resize:none;height:38px;font-size:11px;padding:9px 12px;}
     .ops-send{background:var(--gold);color:#000;border:none;padding:0 16px;font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;letter-spacing:1px;}
     .ops-send:hover{background:var(--gold-hover);}
 
@@ -225,7 +225,24 @@
     .footer-note { text-align:center;padding:16px;font-size:8px;color:var(--text-dim);letter-spacing:2px; }
     .pad16 { padding: 16px; }
   </style>
+  <!-- CryptoJS for encryption -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.0/crypto-js.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <!-- Security modules -->
+  <script src="./js/security/auditLogger.js"></script>
+  <script src="./js/security/inputValidator.js"></script>
+  <script src="./js/security/encryption.js"></script>
+  <script src="./js/security/cspHeaders.js"></script>
+  <script src="./js/security/amlKyc.js"></script>
+  <script src="./js/security/dataRetention.js"></script>
+  <!-- Security initialization -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (typeof initializeSecurityMeasures === 'function') {
+        initializeSecurityMeasures();
+      }
+    });
+  </script>
 </head>
 <body>
 
