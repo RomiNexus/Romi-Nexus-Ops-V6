@@ -25,6 +25,13 @@
 //   getMessages request URL. Required by worker M-06 patch —
 //   without it the request fell through to email-based access
 //   control, blocking ops from reading/sending helpdesk messages.
+//
+// FIX-PP: requestOTP() now persists passphrase to sessionStorage
+//   as rn_ops_v6_pp immediately after sendOTP succeeds.
+//   verifyOpsOTP() restores it from sessionStorage if the hidden
+//   _pp field is empty (e.g. after page jitter/refresh between
+//   the two auth steps). Cleared on auth success, backToPassphrase,
+//   and forceLogout.
 // ============================================================
 
 const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
@@ -77,7 +84,7 @@ function sanitize(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function timeAgo(ts) {
-  if (!ts) return '—';
+  if (!ts) return '\u2014';
   const past = new Date(ts);
   if (isNaN(past.getTime())) return sanitize(String(ts).substring(0,16));
   const diff = Math.floor((Date.now()-past.getTime())/1000);
@@ -155,6 +162,11 @@ async function verifySessionThenShow() {
 
 // ============================================================
 // AUTH
+// FIX-PP: passphrase is persisted to sessionStorage as
+// rn_ops_v6_pp immediately after requestOTP succeeds.
+// verifyOpsOTP() restores it if the hidden _pp DOM field is
+// empty (e.g. after page jitter between the two auth steps).
+// Cleared on success, backToPassphrase, and forceLogout.
 // ============================================================
 async function requestOTP() {
   const pp  = document.getElementById('passphraseInput');
@@ -180,6 +192,8 @@ async function requestOTP() {
     if (data.success) {
       _opsToken = '';
       document.getElementById('_pp').value = val;
+      // FIX-PP: persist passphrase so verifyOpsOTP can recover after page jitter
+      try { sessionStorage.setItem('rn_ops_v6_pp', val); } catch(_) {}
       document.getElementById('authStep1').style.display = 'none';
       document.getElementById('authStep2').style.display = 'block';
       setTimeout(() => document.getElementById('otpInput').focus(), 100);
@@ -200,7 +214,12 @@ async function verifyOpsOTP() {
   if(!otpInput) return;
 
   const otp = (otpInput.value || '').trim();
-  const pp  = document.getElementById('_pp').value;
+  // FIX-PP: restore passphrase from sessionStorage if hidden field is empty
+  let pp = document.getElementById('_pp').value;
+  if (!pp) {
+    pp = sessionStorage.getItem('rn_ops_v6_pp') || '';
+    if (pp) document.getElementById('_pp').value = pp;
+  }
   const btn = document.getElementById('otpBtn');
   const err = document.getElementById('authError2');
 
@@ -228,6 +247,8 @@ async function verifyOpsOTP() {
           token: _opsToken, loginTime: Date.now()
         }));
       } catch(_) {}
+      // FIX-PP: clear persisted passphrase now that auth is complete
+      try { sessionStorage.removeItem('rn_ops_v6_pp'); } catch(_) {}
       document.getElementById('_pp').value = '';
       document.getElementById('passphraseInput').value = '';
       _loadFailCount = 0;
@@ -254,6 +275,8 @@ function backToPassphrase() {
   if(otpInput) otpInput.value = '';
   const ppInput = document.getElementById('_pp');
   if(ppInput) ppInput.value = '';
+  // FIX-PP: clear persisted passphrase on back-to-passphrase
+  try { sessionStorage.removeItem('rn_ops_v6_pp'); } catch(_) {}
 }
 
 function showAuthError(el, msg) {
@@ -278,6 +301,8 @@ function forceLogout(reason) {
   clearTimeout(_idleTimer);
   _opsToken = ''; _opsData = null; _loadFailCount = 0;
   try { sessionStorage.removeItem('romi-ops-v6-session'); } catch(_) {}
+  // FIX-PP: also clear persisted passphrase on any forced logout
+  try { sessionStorage.removeItem('rn_ops_v6_pp'); } catch(_) {}
 
   const opsView = document.getElementById('opsView');
   const authOverlay = document.getElementById('authOverlay');
@@ -554,7 +579,6 @@ function renderChatList(tickets, rooms) {
 async function opsDD(email, decision) {
   if (!confirm(`${decision === 'APPROVED' ? 'APPROVE' : 'REJECT'} DD application for ${email}?`)) return;
 
-  // Read the correct decision token from the already-loaded ddQueue data
   const ddRow = (_opsData?.ddQueue || []).find(d =>
     (d.applicant_email || '').toLowerCase() === email.toLowerCase()
   );
@@ -575,9 +599,9 @@ async function opsDD(email, decision) {
     const action = decision === 'APPROVED' ? 'approveDDReview' : 'rejectDDReview';
     const body = {
       action,
-      opsToken: _opsToken,     // session auth — required by Worker schema
+      opsToken: _opsToken,
       email,
-      token:    decisionToken, // BUG-11 FIX: Python HMAC from dd_queue row
+      token:    decisionToken,
     };
     if (reason) body.reason = reason;
     const res = await fetch(API_URL, {
@@ -715,7 +739,6 @@ async function openOpsChat(roomId, type, label) {
   emptyDiv.textContent = 'LOADING...';
   if(msgContainer) msgContainer.appendChild(emptyDiv);
 
-  // Room info bar
   const infoBar = document.getElementById('roomInfoBar');
   if (type === 'trade' && _opsData) {
     const room = (_opsData.rooms||[]).find(r => r.id === roomId);
@@ -756,9 +779,6 @@ async function opsApproveCurrent(decision) {
 }
 
 // BUG-13 FIX: opsToken now appended to getMessages URL.
-// Worker M-06 patch requires valid opsToken in KV ops_session
-// to grant isOps access. Without it, request fell through to
-// email-based access control, blocking helpdesk messaging.
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
@@ -888,7 +908,7 @@ function openDDModal(btn) {
 
   if (missingDocs.length) {
     html += `<div class="modal-section">
-      <div class="modal-section-title" style="color:var(--warning);">⚠ MISSING DOCUMENTS (${missingDocs.length})</div>
+      <div class="modal-section-title" style="color:var(--warning);">&#x26A0; MISSING DOCUMENTS (${missingDocs.length})</div>
       <div style="padding:8px 0;">${missingDocs.map(d => `<span class="missing-doc-tag">${sanitize(d)}</span>`).join('')}</div>
     </div>`;
   }
@@ -900,7 +920,7 @@ function openDDModal(btn) {
       <div style="font-size:20px;font-weight:700;color:${vc};letter-spacing:4px;margin-bottom:8px;">${sanitize(item.verdict)}</div>
       ${pillarScores.risk_score !== undefined ? `<div class="modal-row"><div class="modal-key">RISK SCORE</div><div class="modal-val" style="color:${scoreColor(pillarScores.risk_score)}">${pillarScores.risk_score}/10</div></div>` : ''}
       ${pillarScores.confidence !== undefined ? `<div class="modal-row"><div class="modal-key">CONFIDENCE</div><div class="modal-val">${pillarScores.confidence}%</div></div>` : ''}
-      ${pillarScores.enhanced !== undefined   ? `<div class="modal-row"><div class="modal-key">ENHANCED REVIEW</div><div class="modal-val" style="color:${pillarScores.enhanced?'var(--warning)':'var(--success)'}">${pillarScores.enhanced ? '⚠ YES — HUMAN SIGN-OFF REQUIRED' : '✓ NO'}</div></div>` : ''}
+      ${pillarScores.enhanced !== undefined   ? `<div class="modal-row"><div class="modal-key">ENHANCED REVIEW</div><div class="modal-val" style="color:${pillarScores.enhanced?'var(--warning)':'var(--success)'}">${pillarScores.enhanced ? '&#x26A0; YES — HUMAN SIGN-OFF REQUIRED' : '✓ NO'}</div></div>` : ''}
       ${item.executive_summary ? `<div style="margin-top:8px;font-size:9px;color:var(--text-muted);line-height:1.7;padding:8px;background:var(--bg-card);border:1px solid var(--border);">${sanitize(item.executive_summary)}</div>` : ''}
     </div>`;
   }
@@ -919,7 +939,7 @@ function openDDModal(btn) {
     html += `<div class="modal-section"><div class="modal-section-title">6-PILLAR ASSESSMENT</div>`;
     pillars.forEach(([label, key]) => {
       if (pillarScores[key]) {
-        const isFlag = pillarScores[key].includes('⚠') || pillarScores[key].toUpperCase().includes('HIT') || pillarScores[key].toUpperCase().includes('CRITICAL');
+        const isFlag = pillarScores[key].includes('&#x26A0;') || pillarScores[key].toUpperCase().includes('HIT') || pillarScores[key].toUpperCase().includes('CRITICAL');
         html += `<div class="pillar-block">
           <div class="pillar-label">${label}</div>
           <div class="pillar-text" style="${isFlag ? 'color:var(--warning)' : ''}">${sanitize(pillarScores[key])}</div>
@@ -942,10 +962,10 @@ function openDDModal(btn) {
     actHtml = `<span style="font-size:9px;color:var(--text-muted);">DD PROCESSING IN PROGRESS — AWAITING AI REPORT</span>`;
   }
   if (item.report_pdf_path) {
-    actHtml += `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="padding:8px 16px;font-size:10px;">📄 DOWNLOAD PDF REPORT</button>`;
+    actHtml += `<button class="action-btn" data-path="${sanitize(item.report_pdf_path)}" data-action="dlpdf" style="padding:8px 16px;font-size:10px;">&#x1F4C4; DOWNLOAD PDF REPORT</button>`;
   }
   if (item.audit_reasoning) {
-    actHtml += `<button class="action-btn" data-action="audittrail" style="padding:8px 16px;font-size:10px;" data-id="${sanitize(item.id)}">🔍 VIEW AUDIT TRAIL</button>`;
+    actHtml += `<button class="action-btn" data-action="audittrail" style="padding:8px 16px;font-size:10px;" data-id="${sanitize(item.id)}">&#x1F50D; VIEW AUDIT TRAIL</button>`;
   }
   setHTML(document.getElementById('modalActions'), actHtml);
 
