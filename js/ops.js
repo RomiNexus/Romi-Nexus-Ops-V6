@@ -20,6 +20,11 @@
 //   OPERATIONAL INTEGRITY, PRODUCT/TECHNICAL MOAT,
 //   MARKET POSITION, CULTURAL/STRATEGIC FIT) were wrong —
 //   they never matched the actual pillar keys from the DD engine.
+//
+// BUG-13 FIX: loadOpsChatMessages() now appends opsToken to
+//   getMessages request URL. Required by worker M-06 patch —
+//   without it the request fell through to email-based access
+//   control, blocking ops from reading/sending helpdesk messages.
 // ============================================================
 
 const API_URL = 'https://rominexus-gateway-v6.vacorp-inquiries.workers.dev';
@@ -750,10 +755,14 @@ async function opsApproveCurrent(decision) {
   if(inputRow) inputRow.style.display     = decision === 'APPROVE' ? 'flex' : 'none';
 }
 
+// BUG-13 FIX: opsToken now appended to getMessages URL.
+// Worker M-06 patch requires valid opsToken in KV ops_session
+// to grant isOps access. Without it, request fell through to
+// email-based access control, blocking helpdesk messaging.
 async function loadOpsChatMessages() {
   if (!_activeChatId || !_opsToken) return;
   try {
-    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}`;
+    let url = `${API_URL}?action=getMessages&email=ops@rominexus.com&roomId=${encodeURIComponent(_activeChatId)}&opsToken=${encodeURIComponent(_opsToken)}`;
     if (_lastMsgTs) url += `&since=${encodeURIComponent(_lastMsgTs)}`;
 
     const res  = await fetch(url);
@@ -897,9 +906,6 @@ function openDDModal(btn) {
   }
 
   // BUG-12 FIX: pillar labels now match Python worker v4.4.0 output exactly
-  // pillar1=ENTITY VERIFICATION, pillar2=BENEFICIAL OWNERSHIP,
-  // pillar3=SANCTIONS SCREENING, pillar4=NEGATIVE NEWS,
-  // pillar5=FINANCIAL HEALTH, pillar6=LEGAL & REGULATORY
   const pillars = [
     ['PILLAR 1 — ENTITY VERIFICATION',  'pillar1'],
     ['PILLAR 2 — BENEFICIAL OWNERSHIP', 'pillar2'],
